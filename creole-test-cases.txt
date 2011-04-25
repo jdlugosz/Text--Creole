@@ -116,8 +116,8 @@ This should be a flower with the ALT text "this is a flower" if your wiki suppor
 Tables are done like this:
 
 |=header col1|=header col2| 
-|col1|col2| 
-|you         |can         | 
+   |col1|col2|    
+|you         |can   
 |also        |align\\ it. | 
 
 You can format an address by simply forcing linebreaks:

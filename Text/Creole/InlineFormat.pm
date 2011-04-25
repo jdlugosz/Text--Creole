@@ -23,7 +23,7 @@ method format (Str $type, Str $line)
  {
  # some types ignore formatting codes.  This could be generalized to select some codes used for each type, but now it's all or nothing.
  return $self->escape ($line)  unless $self->formatting_enabled($type);
- return $self->format_table_row($line)  if $type eq 'table-row';
+ return $self->format_table_row($line)  if $type eq 'tr';
  return $self->do_format ($line);
  }
  
@@ -165,8 +165,17 @@ method format_tag (ArrayRef $data,  $body, Str $extra?)
 
 method format_table_row (Str $line)
  {
- ## stub so far
- return "TABLEFMT($line)";
+ my @cells= split (/\s*(?:\|\s*|\Z)/, $line);
+ shift @cells;  #leading pipe always creates a leading empty value
+ return join '', map {
+    my $s= $_;
+    my $tag= 'td';
+    if ($s =~ /^=\s*(.*)$/) {
+       $s= $1;
+       $tag= 'th';
+       }
+    $self->format_tag ($self->get_tag_data($tag), $self->do_format($s));
+    } @cells;
  }
 
 method formatting_enabled (Str $type)
@@ -189,7 +198,7 @@ method escape (Str $line)
 
 our %default_tag_data=
    map { $_ => [ $_ ] } 
-   (qw/br  a  img/ );
+   (qw/br  a  img td th / );
 
 has  tag_data => (
    is => 'bare',

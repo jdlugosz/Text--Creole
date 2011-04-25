@@ -218,7 +218,7 @@ method process_line_startPre ($line)
  
 method process_line_T ($line)
  {
- $self->_add_result('table-row', $line);
+ $self->_add_result('tr', $line);
  }
  
 method process_line_B ($line)
