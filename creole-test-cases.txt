@@ -4,6 +4,8 @@
 ==== Subsub (4)
 ===== Subsubsub (5)
 
+You can have <<<placeholder>>> objects that I don't know what to do with.
+
 The ending equal signs should not be displayed:
 
 = Top-level heading (1) =
@@ -29,6 +31,10 @@ Here's another sentence: This wisdom is taken from [[Ward Cunningham's]]
 Here's a external link without a description: [[http://www.wikicreole.org]]
 
 Be careful that italic links are rendered properly:  //[[http://my.book.example/|My Book Title]]// 
+
+What if the close is missing?  Try //[[http://my.book.example/|My Book Title]]
+
+
 
 Free links without braces should be rendered as well, like http://www.wikicreole.org/ and http://www.wikicreole.org/users/~example. 
 
@@ -87,14 +93,15 @@ Guitar Chord C:
 ||---|---|---|
 }}}
 
-You can also use it inline nowiki {{{ in a sentence }}} like this.
+You can also use it inline nowiki {{{ in a **stars** sentence }}} like this.
 
 = Escapes =
 Normal Link: http://wikicreole.org/ - now same link, but escaped: ~http://wikicreole.org/ 
 
 Normal asterisks: ~**not bold~**
 
-a tilde alone: ~
+a tilde alone: ~ in a sentence, at the end of a line ~
+and at the end of the last line ~
 
 a tilde escapes itself: ~~xxx
 

@@ -1,9 +1,11 @@
 use 5.10.1;
 use utf8;
+use autodie;
 package Text::Creole::InlineFormat;
 use Moose;
 use namespace::autoclean;
 use MooseX::Method::Signatures;
+use Data::Dump 'dump';
 
 our $REGMARK;
 
@@ -30,40 +32,74 @@ method do_format (Str $line)
  ##experiment with parsing
  my $simples = qr{\*\*};  # extensible by user.  Same opening and closing.
  my $ps= qr{(?<prematch>.*?)
-    (?:
-	  (?:(?<!http:)//) \s* (?<body>.*?)\s*(?: (?:(?<!http:)//)|\Z)(*:italic)  # special rules for //, TODO start no problem, skip any links in body.
+     (?:
+       (?<link>
+          (?: \[\[\s*(?<body>.*?)\s*\]\]   )  # explicit use of brackets
+          | (?:  (?<body>(?:http|ftp)s?://\S+)   )   # bare (just a start)
+       )(*:link)
+     | ~ (?<body> (?&link)|.|\Z  ) (*:escape)
+	 | // \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: //|\Z)(*:italic)  # special rules for //, TODO start no problem, skip any links in body.
 	 |  (?<simple>$simples)\s*(?<body>.*?)\s*(?:\k<simple>|\Z)(*:simple)
 	 | \\\\ (*:break)
-	 | \[\[\s*(?<body>.*?)\s*\]\](*:link)
+     | \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)  # be sure to check for three braces before checking for two.
+     | \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)
+     | \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)  # be sure to check for 3 angles before checking for 2 (extension)
 	 | \Z (*:nada)  # must be the last branch
 	)
 	}xs;
  my @results;
  while ($line =~ /$ps/g) {
-	# careful not to trash my capture variables!  So no using regex at all until I determined what I need and saved it.
-    my $prematch= $+{prematch};
-	my $s;
-	my $body= $+{body};
-	if ($REGMARK eq 'simple') {
-	   my $style= $+{simple};
-	   $s= $self->simple_format ($style, $body);
-	   }
-	elsif ($REGMARK eq 'italic') {
-	   $s= $self->simple_format ('//', $body);
-	   }
-	elsif ($REGMARK eq 'break') {
-	   $s= $self->format_tag ($self->get_tag_data('br'), undef);
-	   }
-	elsif ($REGMARK eq 'link') {
-	   $s= $self->process_link_body ($body);
-	   }
-	# other cases...
+    my %captures;
+    while (my($key,$value)=each %+) { $captures{$key}=$value }
+	my $regmark= $REGMARK;
+    my $prematch= $captures{prematch};
 	push @results, $self->escape($prematch)  unless length($prematch)==0;
-	push @results, $s  if defined $s;
+	my $body= $captures{body};
+	given ($regmark) {
+	   when ('simple') {
+          my $style= $captures{simple};
+	      push @results, $self->simple_format ($style, $body);
+	      }
+	   when ('italic') {
+	      push @results, $self->simple_format ('//', $body);
+	      }
+	   when ('break') {
+	      push @results, $self->format_tag ($self->get_tag_data('br'), undef);
+	      }
+	   when ('link') {
+	      push @results, $self->process_link_body ($body);
+	      }
+	   when ('nowiki') {
+          push @results, $self->escape($body);
+          }
+	   when ('escape') {
+          $body= "~$body"  if $body =~ /^\s*$/s;   # keep it if followed by blank or line-end
+          push @results, $self->escape($body);
+          }
+       when ('image') {
+          push @results, $self->process_image ($captures{link}, $captures{alt});
+          }
+       when ('placeholder') {
+          push @results, $self->process_placeholder ($body);
+          }
+       # other cases...
+	   }
 	}
  return join ('', @results);
  }
 
+
+=item process_placeholder
+ 
+This method is called when the placeholder syntax is seen.  Override it to do something useful with placeholders.
+ 
+=cut
+ 
+method process_placeholder (Str $body)
+ {
+ return $self->format_tag ([ 'span', 'placeholder' ], $self->escape($body));
+ }
+ 
  
 method process_link_body (Str $body)
  {
@@ -73,6 +109,15 @@ method process_link_body (Str $body)
  return $self->format_tag ($self->get_tag_data('a'), $text, $href);
  }
 
+method process_image (Str $link, $alt)
+ {
+ $alt //= 'image';
+ my $href= $link;   # TODO: map strings to full URL
+ return $self->format_tag ($self->get_tag_data('img'), $href, $alt); 
+ }
+ 
+ 
+ 
 =item simple_format
 
 This handles formatting of the so-called "simple" format codes.  These have the same sequence opening and closing, and the built-in ones are bold and italics.  These are extensible by the caller, so this looks up the tag in a configuration table.
@@ -103,6 +148,10 @@ method format_tag (ArrayRef $data,  $body, Str $extra?)
  {
  my ($tag, $class)= @$data;
  my $classinfo=  defined $class ? qq( class="$class") : '';
+ if ($tag eq 'img') {
+    # this one is different!
+    return qq(<$tag$classinfo src="$body" alt="$extra" />);
+    }
  my $more= '';
  if (defined $extra) {
     die "Don't know how to format <$tag> with \$extra " unless $tag eq 'a';
@@ -140,7 +189,7 @@ method escape (Str $line)
 
 our %default_tag_data=
    map { $_ => [ $_ ] } 
-   (qw/br  a/ );
+   (qw/br  a  img/ );
 
 has  tag_data => (
    is => 'bare',
