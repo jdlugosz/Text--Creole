@@ -14,7 +14,7 @@ The ending equal signs should not be displayed:
 ==== Subsub (4) ====
 ===== Subsubsub (5) =====
 
-Special HTML characters are not a problem: this&that, 3<5 and all that stuff.  But Entities are passed through, like &ldquo;fancy quotes&rdquo;.  This is not mentioned in the Creole spec but would seem to be necessary.
+Special HTML characters are not a problem: this&that, 3<5 and all that stuff.  But Entities are passed through, like &ldquo;fancy quotes&rdquo;.  This is not mentioned in the Creole spec but would seem to be necessary.  Check numeric entities like &#x2023; and &#8226;.
 
 You can make things **bold** or //italic// or **//both//** or //**both**//.
 
@@ -111,7 +111,7 @@ a tilde escapes itself: ~~xxx
 
 === Creole 0.2 ===
 
-This should be a flower with the ALT text "this is a flower" if your wiki supports ALT text on images:
+This should be a flower with the ALT text "here is a red flower" if your wiki supports ALT text on images:
 
 {{Red-Flower.jpg|here is a red flower}}
 

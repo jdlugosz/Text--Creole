@@ -48,8 +48,7 @@ method do_format (Str $line)
 	}xs;
  my @results;
  while ($line =~ /$ps/g) {
-    my %captures;
-    while (my($key,$value)=each %+) { $captures{$key}=$value }
+    my %captures= %+;
 	my $regmark= $REGMARK;
     my $prematch= $captures{prematch};
 	push @results, $self->escape($prematch)  unless length($prematch)==0;

@@ -74,6 +74,18 @@ method output()
  }
 
 
+method open_table_container
+ {
+ return "<table>";  # for now
+ }
+
+method close_table_container
+ {
+ return "</table>";  # for now
+ }
+ 
+ 
+ 
 method list_tag_types (Str $spec)
  {
  my @tags;
@@ -85,27 +97,51 @@ method list_tag_types (Str $spec)
  return @tags;
  } 
 
-method open_list_containers (Str $type)
+method open_list_containers (Str $type, Bool $first)
  {
- warn "open list containers for $type\n"; ###############
  my @lines;
  my @opens= $self->list_tag_types ($type);
  foreach my $tag (@opens) {
-    push @lines, qq(<$tag>);  # for now.
+    if ($first) {
+       push @lines, qq(<$tag>);  # for now.
+       undef($first);
+       }
+    else {
+       push @lines, qq(<li><$tag>);  # for now.
+       }
     # todo: indenting
     }
  return @lines;
  }
 
-method close_list_containers (Str $type)
+method close_list_containers (Str $type, Bool $last)
  {
- warn "close list containers for $type\n"; ###############
  my @lines;
  my @opens= $self->list_tag_types ($type);
- foreach my $tag (@opens) {
-    push @lines, qq(</$tag>);  # for now.
+ my $lasttag;
+ $lasttag= pop @opens  if $last;  # treat the final one differently
+ foreach my $tag (reverse @opens) {
+    push @lines, qq(</$tag></li>);  # for now.
     # todo: indenting
     }
+ if ($lasttag) {
+    push @lines, qq(</$lasttag>);  # for now.
+    }
+ return @lines;
+ }
+
+method change_list_levels (Str $type)
+ {
+ my $old_levels= $self->_list_state;
+ $self->_list_state($type);
+ ($type ^ $old_levels) =~ /^(\0+)/;
+ my $prefix_len= length($1);
+ substr($type, 0, $prefix_len) = '';
+ substr($old_levels, 0, $prefix_len) = '';
+ my $bottomed_out= $prefix_len==0;
+ my @lines;
+ push @lines, $self->close_list_containers ($old_levels, $bottomed_out);
+ push @lines, $self->open_list_containers ($type, $bottomed_out);
  return @lines;
  }
 
@@ -120,37 +156,31 @@ method block_format (Str $type, Str $text)
     when ('tr') { $incoming= 'T' }
     default { $incoming= 'o' }
     }
- given ("$state$incoming") {
-    when ('TT' || 'oo') {  }  # nothing to do
-    when ('LL') {  
-       warn "In LL case\n";
-       # >> deal with changing list levels
-       $type= 'li';
+ if ($state eq $incoming) {
+    if ($state eq 'L') {
+       push @results, $self->change_list_levels($type)   if $self->_list_state ne $type;
+       $type= 'li';    
        }
-    when ('LT') {  
-       warn "In LT case\n";
-       $self->_block_state('T');
+    # otherwise, no change to current situations.
+    }
+ else {
+    given ($state) {   # what I'm exiting
+       when ('L') {  push @results, $self->close_list_containers ($self->_list_state, 1); }
+       when ('T') {  push @results, $self->close_table_container; } 
        }
-    when ('Lo') {   # closing a list
-       warn "In Lo case\n";
-       push @results, $self->close_list_containers ($self->_list_state);
-       $self->_block_state('o');
+    given ($incoming) {   # what I'm entering
+       when ('L') { 
+          push @results, $self->open_list_containers ($type, 1);
+          $self->_list_state ($type);
+          $type= 'li';
+          $self->_block_state('L');
+          }
+       when ('T') {
+          push @results, $self->open_table_container;
+          $self->_block_state('T');
+          }
        }
-    when ('TL') {  
-       warn "In TL case\n";
-       $self->_block_state('o');
-       }
-    when ('To') {  
-       warn "In To case\n";
-       $self->_block_state('o');
-       }
-    when ('oL') {   # opening a list
-       push @results, $self->open_list_containers ($type);
-       $self->_list_state ($type);
-       $type= 'li';
-       $self->_block_state('L');
-       }
-    when ('oT') {  }
+    $self->_block_state($incoming);
     }
  # TODO: handle indenting (but not PRE)
  push @results, $self->format_tag ($self->get_tag_data($type), $text);
@@ -185,7 +215,17 @@ method format_tag (ArrayRef $data,  $body, Str $extra?)
 
 method escape (Str $line)
  {
- $line =~ s/&/&amp;/g;
+ $line =~ s/
+    &   #any ampersand...
+    (?!  # that's NOT followed by stuff that would make it an Entity reference
+       (?:  # various ways to form the guts of the Entity
+          [a-zA-Z]+\d*  # some entity names end with digits, but never have them elsewhere.
+          | \# (?:  # A numeric entity code
+             \d+ |  (?:x|X) [[:xdigit:]]+
+             )
+       )
+     ;  # and a trailing semicolon.
+    )/&amp;/gx;
  $line =~ s/</&lt;/g;
  return $line;
  }
