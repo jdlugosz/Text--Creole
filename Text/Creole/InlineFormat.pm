@@ -5,7 +5,6 @@ package Text::Creole::InlineFormat;
 use Moose;
 use namespace::autoclean;
 use MooseX::Method::Signatures;
-use Data::Dump 'dump';
 
 our $REGMARK;
 
@@ -54,40 +53,54 @@ method do_format (Str $line)
 	my $regmark= $REGMARK;
     my $prematch= $captures{prematch};
 	push @results, $self->escape($prematch)  unless length($prematch)==0;
-	my $body= $captures{body};
-	given ($regmark) {
-	   when ('simple') {
-          my $style= $captures{simple};
-	      push @results, $self->simple_format ($style, $body);
-	      }
-	   when ('italic') {
-	      push @results, $self->simple_format ('//', $body);
-	      }
-	   when ('break') {
-	      push @results, $self->format_tag ($self->get_tag_data('br'), undef);
-	      }
-	   when ('link') {
-	      push @results, $self->process_link_body ($body);
-	      }
-	   when ('nowiki') {
-          push @results, $self->escape($body);
-          }
-	   when ('escape') {
-          $body= "~$body"  if $body =~ /^\s*$/s;   # keep it if followed by blank or line-end
-          push @results, $self->escape($body);
-          }
-       when ('image') {
-          push @results, $self->process_image ($captures{link}, $captures{alt});
-          }
-       when ('placeholder') {
-          push @results, $self->process_placeholder ($body);
-          }
-       # other cases...
-	   }
-	}
+    push @results, $self->grammar_branch ($regmark, \%captures);
+    }
  return join ('', @results);
  }
 
+=item grammar_branch
+
+This is called after identifying a match from the inline formatting grammar.  Extend it to add processing for any new branches you add to the grammar.
+
+It can return a list of strings that are concatenated by the caller.
+
+=cut
+
+## Or, maybe this should be a separate function for each branch?
+method grammar_branch (Str $regmark, HashRef $captures)
+ {
+ my $body= $$captures{body};
+ given ($regmark) {
+    when ('simple') {
+       my $style= $$captures{simple};
+	   return $self->simple_format ($style, $body);
+	   }
+	when ('italic') {
+	   return $self->simple_format ('//', $body);
+	   }
+	when ('break') {
+	   return $self->format_tag ($self->get_tag_data('br'), undef);
+	   }
+	when ('link') {   # change this to parse out | in already, like with img.
+	   return $self->process_link_body ($body);
+	   }
+	when ('nowiki') {
+       return $self->escape($body);
+       }
+	when ('escape') {
+       $body= "~$body"  if $body =~ /^\s*$/s;   # keep it if followed by blank or line-end
+       return $self->escape($body);
+       }
+    when ('image') {
+       return $self->process_image ($$captures{link}, $$captures{alt});
+       }
+    when ('placeholder') {
+       return $self->process_placeholder ($body);
+       }
+	}
+ }
+ 
+ 
 
 =item process_placeholder
  
