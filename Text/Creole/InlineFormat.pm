@@ -149,32 +149,6 @@ method simple_format (Str $style, Str $body)
  return $self->format_tag ($simple_format_tag{$style}, $body);
  }
 
-=item format_tag
-
-This formats a single tag, using the supplied data.  The normal meaning for generating xml is that the array contains the tag name and optional class name.  To repurpose this and format things in a totally different way, you can repurpose the meaning of the configured data and add more values to the array.
-
-This should be hoised out of this class.  Here for now.
-
-=cut
-
-method format_tag (ArrayRef $data,  $body, Str $extra?)
- {
- my ($tag, $class)= @$data;
- my $classinfo=  defined $class ? qq( class="$class") : '';
- if ($tag eq 'img') {
-    # this one is different!
-    return qq(<$tag$classinfo src="$body" alt="$extra" />);
-    }
- my $more= '';
- if (defined $extra) {
-    die "Don't know how to format <$tag> with \$extra " unless $tag eq 'a';
-	$more= qq( href="$extra");
-    }
- if (!defined($body) || length($body)==0) {
-    return "<$tag$classinfo />";
-    }
- return "<$tag$classinfo$more>$body</$tag>";
- }
 
 method format_table_row (Str $line)
  {
@@ -202,17 +176,6 @@ method formatting_enabled (Str $type)
     }
  }
 
-method escape (Str $line)
- {
- $line =~ s/&/&amp;/g;
- $line =~ s/</&lt;/g;
- return $line;
- }
-
-our %default_tag_data=
-   map { $_ => [ $_ ] } 
-   (qw/br  a  img td th / );
-
 has  tag_data => (
    is => 'bare',
    traits => ['Hash'],
@@ -220,7 +183,13 @@ has  tag_data => (
    handles => {
       get_tag_data => 'get'
 	  }, 
-   default => sub { \%default_tag_data },
+   required => 1,
    );
+
+has tag_formatter => (
+    is => 'bare',
+    handles => [ qw( format_tag escape)],
+    required => 1,
+    );
 
 __PACKAGE__->meta->make_immutable;

@@ -14,6 +14,7 @@ The ending equal signs should not be displayed:
 ==== Subsub (4) ====
 ===== Subsubsub (5) =====
 
+Special HTML characters are not a problem: this&that, 3<5 and all that stuff.  But Entities are passed through, like &ldquo;fancy quotes&rdquo;.  This is not mentioned in the Creole spec but would seem to be necessary.
 
 You can make things **bold** or //italic// or **//both//** or //**both**//.
 
@@ -94,6 +95,9 @@ Guitar Chord C:
 }}}
 
 You can also use it inline nowiki {{{ in a **stars** sentence }}} like this.
+But naturally }}} by itself has no special meaning, and likewise on a line by itself:
+}}}
+This is still in the same paragraph.
 
 = Escapes =
 Normal Link: http://wikicreole.org/ - now same link, but escaped: ~http://wikicreole.org/ 

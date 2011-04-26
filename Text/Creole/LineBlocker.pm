@@ -140,15 +140,17 @@ method classify_in_context (Str $ptype, Str $line)
  my $state= $self->_current_state;
  given ($state) {
     when (!defined) { }  # just prevent warnings when it never matches the regex anyway.
+	when (/^pre/) {
+	   return 'cont' unless $ptype eq 'endPre';
+       return $ptype;
+	   }
     when (/^(p|L)/) {
 	   # ❝One or more blank lines end paragraphs. A list, table or nowiki block end paragraphs too.❞
 	   # ❝A list item ends at the line which begins with a * or # character (next item or sublist), blank line, heading, table, or nowiki block❞
 	   return 'cont' unless $ptype ~~ [qw/B L T : startPre/];
 	   }
-	when (/^Pre/) {
-	   return 'cont' unless $ptype eq 'endPre';
-	   }
     }
+ $ptype= 'p'  if $ptype eq 'endPre';  # if PRE is not open, closing doesn't have any special meaning.
  $ptype= $self->classify_allowed_list ($ptype, $line)  if $ptype eq 'L';
  return $ptype;
  }
@@ -165,16 +167,19 @@ method relate_to_current (Str $ptype, Str $line)
  {
  my $state= $self->_current_state;
  return 1 unless defined $state;
- return 1  unless $state =~ /^(p|Pre|L)/;  # only these get a multi-line block
+ return 1  unless $state =~ /^(p|pre|L)/;  # only these get a multi-line block
  my $current_type= $1;
  # I might have suffexes to the primtive types, so match the first part of the string with the proffered extension.
  if ($ptype eq 'cont') {
-	if ($current_type eq 'Pre' && $line =~ /^\s+\}{3}\s*$/) {
+	if ($current_type eq 'pre' && $line =~ /^\s+\}{3}\s*$/) {
        # check for non-ending }}} line.
 	   substr($line,0,1) = '';  # remove the first character
 	   }
     $self->add_to_current_para ($line);
 	return undef;  # tell caller I took it.
+    }
+ if ($ptype eq 'endPre') {
+    $self->add_to_current_para ('');  #end a PRE block with a line break.
     }
  $self->complete_current_para;
  if ($ptype ~~ [qw/B endPre/]) {
@@ -213,7 +218,7 @@ method process_line_L ($line)
 
 method process_line_startPre ($line)
  {
- $self->_current_state ('Pre');
+ $self->_current_state ('pre');
  }
  
 method process_line_T ($line)
