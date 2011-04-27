@@ -34,6 +34,7 @@ has inline_formatter => (
    is => 'ro',
    lazy => 1,
    builder => 'build_inline_formatter',
+   handles => [qw/simple_format_tags/],
    );
 
 our %default_tag_data=
@@ -65,6 +66,19 @@ has _list_state => (
    init_arg => undef,
    );
 
+   
+method BUILD ($args)
+ {
+ if ($args->{extended_simples}) {
+    my $defs= $self->simple_format_tags;
+    $defs->{'##'} = ['tt'];   # monospace
+    $defs->{'^^'} = ['sup'];  # superscript
+    $defs->{',,'} = ['sub'];  # subscript
+    $defs->{'__'} = ['u']; # underlined
+    }
+ }
+   
+   
 method output()
  {
  return map { 
@@ -107,7 +121,7 @@ method open_list_containers (Str $type, Bool $first)
        undef($first);
        }
     else {
-       push @lines, qq(<li><$tag>);  # for now.
+       push @lines, qq(<li class="nestlist"><$tag>);  # for now.
        }
     # todo: indenting
     }
@@ -195,23 +209,37 @@ This formats a single tag, using the supplied data.  The normal meaning for gene
 
 method format_tag (ArrayRef $data,  $body, Str $extra?)
  {
+ if ($$data[0] eq 'img') {
+    # this one is different!
+    my $class= $$data[1];
+    my $classinfo=  defined $class ? qq( class="$class") : '';
+    return qq(<img$classinfo src="$body" alt="$extra" />);
+    }
+ my $singular= !defined($body) || length($body)==0;
+ my ($open,$close)= $self->format_tag_wrapper ($data, $extra, $singular);
+ return $open  unless defined $close;
+ return "$open$body$close";
+ }
+
+
+method format_tag_wrapper (ArrayRef $data,  Maybe[Str] $extra?, Bool $singular?)
+ {
  my ($tag, $class)= @$data;
  my $classinfo=  defined $class ? qq( class="$class") : '';
- if ($tag eq 'img') {
-    # this one is different!
-    return qq(<$tag$classinfo src="$body" alt="$extra" />);
-    }
  my $more= '';
  if (defined $extra) {
     die "Don't know how to format <$tag> with \$extra " unless $tag eq 'a';
 	$more= qq( href="$extra");
     }
- if (!defined($body) || length($body)==0) {
-    return "<$tag$classinfo />";
-    }
- return "<$tag$classinfo$more>$body</$tag>";
- }
+ return "<$tag$classinfo />" if $singular;
+ return ("<$tag$classinfo$more>", "</$tag>");
+ } 
+ 
+=item escape
 
+This is called to sanitize text of any special xml characters.  It is called for spans of plain text, and will not include the Creole formatting directives or any generated xhtml code.  If you repurpose this module to output something other than xhtml, you would need to change this.
+
+=cut
 
 method escape (Str $line)
  {

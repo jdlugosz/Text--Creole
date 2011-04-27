@@ -1,0 +1,49 @@
+= Class Text::Creole documentation and examples =
+
+This document is written using Creole, not POD as is traditional for Perl modules, because this is a class //for// Creole, and it serves as an example of the various constructs that this module can handle.
+
+<< AutoTOC >>
+
+== Why I Created This Module ====
+
+When I wanted to read Creole content for a web site design, I used [[cpan://Text::WikiCreole]] version 0.07 by Jason Burnett.  However, there were several things I didn't like about it:  The generated xhtml included blank lines between the paragraphs with no options to make it generate xhtml that looked like the rest of the page it was going to be included into; and the various Extended Markup could not be disabled or adjusted.
+
+So, I decided to write one from scratch, and concentrate on configurability and extendability.
+
+== Various Features ==
+
+//This is not organized yet.  I just note stuff when I think of it
+
+=== Escaping
+
+The text that winds up in the xhtml output needs to be checked for characters that would bother the xhtml format.  In particular, ##&## and ##<## are escaped.  Naturally it needs to understand that only stuff that is in the text proper needs to be escaped, and the various markup it //generated// should be left intact!  In particular, the ##escape## function is called for all spans of plain text and URL text.
+
+The escape function will pass things that look like Entities as-is, so ##&Delta;## will pass through to the browser unchanged and show as a Greek Delta character, and not be escaped to show literally as ##~&Delta;##.  But to show the literal form as I did here, the ~ escape was used.
+
+=== Filtering
+
+The 
+
+== Extensions to Creole 1.0
+
+You may not necessarily want all the extensions enabled!  You might need to match the behavior of other code or be compatible with other consumers of the same input.  By default, the object handles baseline Creole 1.0 only.
+
+This document uses ## ~## monospace ~## ## markup, which is an extension.  In fact, it is a //simple inline format// extension, which is especially easy to handle.  These are characterised by having the identical opening and closing markers, and are mapped to some kind of inline formatting tag in the resulting xhtml.  You can add your own //simple// formats by adding to ##simple_format_tags##.
+
+Several common extensions are built in.  Construct the object with ##extended_simples## set to True like this:
+{{{
+my $x= Text::Creole->new (extended_simples => 1);
+}}}
+and it will enable 
+
+|=mark |=example|=html
+| ~## monospace ~## | This is some ##code## sample| <tt>
+| ~^^ superscript ~^^ | 6.022 × 10^^23^^ | <sup>
+| ~,, subscript ~,, | H,,2,,O | <sub>
+| ~__ underline ~__ | Some __underlined__ text | <u>
+
+
+
+
+
+Still eating last line?

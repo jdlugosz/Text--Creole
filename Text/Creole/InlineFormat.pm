@@ -25,28 +25,50 @@ method format (Str $type, Str $line)
  return $self->format_table_row($line)  if $type eq 'tr';
  return $self->do_format ($line);
  }
- 
-method do_format (Str $line)
+
+method _build_parser_spec
  {
- ##experiment with parsing
- my $simples = qr{\*\*};  # extensible by user.  Same opening and closing.
- my $ps= qr{(?<prematch>.*?)
-     (?:
+ # build the "simples" based on the declared tags
+ my $simples_string= join "|", map { $_ eq '//' ? () : quotemeta($_) }  (keys %{$self->simple_format_tags});
+ my $simples = qr{$simples_string};  # extensible by user.  Same opening and closing.
+ my $link= qr{
        (?<link>
           (?: \[\[\s*(?<body>.*?)\s*\]\]   )  # explicit use of brackets
           | (?:  (?<body>(?:http|ftp)s?://\S+)   )   # bare (just a start)
        )(*:link)
+    }x;
+ my $nowiki= qr{
+    \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)
+    }xs;
+ my $image= qr{
+    \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)
+    }xs;
+ my $placeholder= qr{
+    \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)
+    }xs;
+ my $extensions= qr/(*FAIL)/;
+ 
+ my $ps= qr{(?<prematch>.*?)
+     (?:
+     $link
      | ~ (?<body> (?&link)|.|\Z  ) (*:escape)
-	 | // \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: //|\Z)(*:italic)  # special rules for //, TODO start no problem, skip any links in body.
-	 |  (?<simple>$simples)\s*(?<body>.*?)\s*(?:\k<simple>|\Z)(*:simple)
+     |  // \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic)  # special rules for //, skip any links in body.
+	 |  (?<simple>$simples)\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)
 	 | \\\\ (*:break)
-     | \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)  # be sure to check for three braces before checking for two.
-     | \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)
-     | \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)  # be sure to check for 3 angles before checking for 2 (extension)
+     | $nowiki  # be sure to check for three braces before checking for two.
+     | $image
+     | $placeholder  # be sure to check for 3 angles before checking for 2 (extension)
+     | $extensions
 	 | \Z (*:nada)  # must be the last branch
 	)
 	}xs;
+ return $ps;
+ }
+
+method do_format (Str $line)
+ {
  my @results;
+ my $ps= $self->_parser_spec;
  while ($line =~ /$ps/g) {
     my %captures= %+;
 	my $regmark= $REGMARK;
@@ -136,16 +158,20 @@ This handles formatting of the so-called "simple" format codes.  These have the 
 
 =cut
 
-my %simple_format_tag= (
-   # for now.  Will be extendable and customizable.
-   '**' => ['strong'],  # tag,class pairs with class optional.  Same general format as will be used to configure the tags.
-   '//' => ['em']
-   );
 
+has simple_format_tags => (
+   is => 'rw',
+   isa => 'HashRef',
+   default => sub { {
+      '**' => ['strong'],  # tag,class pairs with class optional.
+      '//' => ['em']
+      }} ,
+   );
+   
 method simple_format (Str $style, Str $body)
  {
  $body= $self->do_format($body);
- return $self->format_tag ($simple_format_tag{$style}, $body);
+ return $self->format_tag ($self->simple_format_tags->{$style}, $body);
  }
 
 
@@ -189,6 +215,15 @@ has tag_formatter => (
     is => 'bare',
     handles => [ qw( format_tag escape)],
     required => 1,
+    weak_ref => 1,  # normally points back to parent Creole object
     );
 
+has _parser_spec => (
+   is => 'rw',
+   isa => 'RegexpRef',
+   init_arg => undef,
+   builder => '_build_parser_spec',
+   lazy => 1,
+   );
+   
 __PACKAGE__->meta->make_immutable;
