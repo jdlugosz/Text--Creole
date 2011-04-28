@@ -12,7 +12,7 @@ So, I decided to write one from scratch, and concentrate on configurability and 
 
 == Various Features ==
 
-//This is not organized yet.  I just note stuff when I think of it
+@#$ This is not organized yet.  I just note stuff when I think of it
 
 === Escaping
 
@@ -30,9 +30,42 @@ A pseudo-entity is something that uses the Entity syntax but is not recognised b
 
 === Filtering
 
-The 
+The //escaping// described above is processing that must be applied to __all__ content other than the generated tags themselves.  The //Filtering// feature is different in that it's not applied to preformatted blocks and nowiki blocks, and may be escaped to disable the effects.
 
-Also can be used for "magic words".
+The filtering can be extended or replaced by overriding the ##filter## method of the Text::Creole class.  The built-in effects can be disabled using configuration parameters.
+
+The supplied filtering function performs:
+
+* smart quotes (single and double)
+* smart apostrophe
+* ellipses
+* {{{ (TM), (R), (C) }}}
+* em-dash and en-dash
+* numeric negative sign
+* configurable direct macros
+* configurable "magic words"
+
+==== Direct Macros
+
+Anything can be specified as something to be replaced during processing.  For example XXXX could be replaced with the signature/date/time of the edit.  (Note: some wikis use a string of tildes for this.  That is problematic here, since that is used as the escape character and handled at an earlier stage of processing.  Tilde string is handled by another feature.)
+
+You can register regular expressions (so they can do some degree of context checking via look-ahead and look-behind assertions) and strings or callable subs for the substitutions.  Note that other markup characters will interrupt the text so look-around will be blocked.  This function is called for runs of plain text only and will see an isolated string if it's surrounded by markup syntax.
+
+=== Magic Words
+
+Strings surrounded by ~@ characters, like {{{ @MAGICWORD@ }}}, are spotted and use a list of substitutions too.  You supply the string of the word (case-insensitive) not including the delimiters, along with a substutution string or sub.  You might generate a string of xhtml markup, not a simple text substution, so the result is //not// passed along to the escape function.  You must ensure that any substution supplied is proper xhtml.
+
+Anything that doesn't match a listed magic word is treated as-is and comes out unchanged, with the ~@ characters intact.
+
+
+=== Tilde Strings
+
+Some wikis use a string of tildes to indicate things like signature or edit time.  Since the tilde is used to escape what follows, this needs to be handled specially, and processed before the normal use of tilde.
+
+You can define a callback for a tilde string (@#$ TBD @#$) that is passed the count of how many tildes were in the string.  It should return the text to substitute at that point.  If you don't define this, then no special handling is performed and each group of two tildes form one escaped literal tilde.
+
+Like with the Magic Words, you might generate a string of xhtml markup, not a simple text substution, so the result is //not// passed along to the escape function.  You must ensure that any substution supplied is proper xhtml.
+
 
 == Extensions to Creole 1.0
 
@@ -53,7 +86,7 @@ and it will enable
 | ~## monospace ~## | This is some ##code## sample| <tt>
 | ~^^ superscript ~^^ | 6.022 × 10^^23^^ | <sup>
 | ~,, subscript ~,, | H,,2,,O | <sub>
-| ~__ underline ~__ | Some __underlined__ text | <u>
+| ~__ underline ~__ | Some __underlined__ text | <span class="underlined">\\(the <u> tag is deprecated and not allowed in strict xhtml)
 
 You can modify the meaning of any of these, remove any, or add new ones.  After creating the ##Text::Creole## instance but //before// using it to do any formatting, you can access the ##simple_format_tags## member which is a hash reference.  For example, this document uses ##~@#$## to indicate a special note.  This is done like so:
 
@@ -70,6 +103,45 @@ The value is a list, with the first (mandatory) element being the name of the ta
 === Mixed List Types
 
 === Non-Bulleted Paragraph / Indented Paragraph
+
+=== Plug-in Syntax
+
+Plug-in's are not part of Creole 1.0, but is mentioned as an unofficial [[http://www.wikicreole.org/wiki/CreoleAdditions | Addition]] which may become part of a later version of the standard.
+
+This document contains the source ##{{{<< AutoTOC >>}}}## which automatically generates a table of contents based on all the headers present.
+
+@#$ Not Implemented Yet @#$ 
+The syntax (two angle brackets, not to be confused with placeholders which use three) is enabled if any plug-ins are defined, and is separate for inline and block plug-ins.
+
+To define a plug-in, call ##{{{ $creole->add_plug_in ($name, \&callback, 'block'); }}}##.  The $name will be the first token in the brackets, and is case-insensitive.  The callback function is called with the name (actual case as found) and the rest of the contents of the brackets, and must return the xhtml to include at that point.  For example,
+
+{{{
+sub callback {
+   my ($name, $rest)= @_;
+   return qq(<span class="plugin">Plugin Name:$name and arguments $rest</span>);
+}
+}}}
+
+Except that a real plug-in should take care to escape any content generated between the tags!
+The default, if a name is not matched with a registered plug-in handler, is similar to this, so you will see it indicated in the output (perhaps the Name was misspelled).
+
+An inline plugin will be recognised as inline formatting, in with a paragraph (or list item, table cell, etc.).  The return value should be xhtml suitable for being inside of a paragraph, e.g. a span.  The TOC wants to generate a div, not a span, and is a //block//.  Registering it as a block plug-in means that it will be parsed on the level with paragraphs, headers, etc.  The callback should generate xhtml that goes between paragraphs.  The parser only recognises block plug-ins when used in the manner of a block: It must be on a line by itself, and needs to be separated from a preceeding paragraph with a blank line.
+
+Now the AutoTOC plug-in doesn't know what to generate until after all the input is processed!  The supplied AutoTOC is actually a plug-in for the Creole class, extending it to generate id attributes in the headers and keeping a list of all the headers and ids generated.  But it doesn't know the results when this tag is processed.
+
+So this callback looks something like this:
+{{{
+sub AutoTOC_callback {
+   my (undef, $args)= @_;
+   enable_and_configure_TOC_generation ($args);
+   return ("X", qq(<div class="TOC">\N{Object Replacement Character}(TOC goes here)</div>) );
+}
+}}}
+
+A callback for a block plug-in returns //two// values, as it is called during the phase of processing that gathers and categorizes blocks (the LineBlocker class).  The later step handles the X (extension) block by passing the content through unchanged.  A custom block type could be used to trigger another callback at that stage, but it doesn't help because it might still will not have processed all the input.  So, this placeholder is output and that's what winds up in Creole object's output.
+
+After passing the Creole text file through the object and gathering all the output, the caller can then ask the TOC class for the completed table of contents, and splice it into the original output.  It knows where to insert it by looking for its unique placeholder text.
+
 
 == Configuration
 
@@ -89,6 +161,42 @@ There are two issues concerning links that need to be taylored to your applicati
 
 ==== Link Name Mapping
 
+When the user writes a like like ##{{{ [[Somepage]] }}}##, that has meaning defined by the system it is being used in.  In order to render this as an actual link, it needs to be translated into a full URL.  In general, this is different for every system, so you need to configure it.
+
+You can pass a sub ref to the object when creating it or by using the attribute accessor afterwards (the latter lets you chain to the previous value).  The attribute is called ##link_mapper##.  For example, you can write:
+{{{
+my $creole= Text::Creole->new (link_mapper => \&link_mapper_callback);
+}}}
+
+This function will be called with two parameters and should return (up to) three values.
+
+The first parameter the link text which should be transformed into a valid URL, and the second is the display name which will be shown instead of the URL.
+
+{{{
+sub link_mapper_callback {
+	my ($link, $text)= @_;
+	my $type= 'a';  # normal
+	if ($link =~ s{^cpan://}{http://search.cpan.org/search?query=}p) {
+	   $type= 'a-external';
+	   $text= ${^POSTMATCH}  unless $text;
+	   }
+	return ($link, $text, $type);
+}
+}}}
+
+This example mapps the cpan shortcut to a proper URL, and furthermore returns a type of "a-external".  This third value, the type, will be looked up in ##tag_data## (see above on configuring tag data), which could be set to ##['a', 'external']##.  Now a bare link in the text such as ##~cpan://FormFu## will generate ##{{{<a href="http://search.cpan.org/search?query=FormFu" class="external">FormFu</a>}}}##.
+
+@#$Am going to implement this soon@#$
+
+If no mapper function is supplied, the default is to leave them unchanged.
+
+
+==== Image Name Mapping
+
+Image names and the associated Alt text is handled in an identical manner.  The name of the attribute on the Text::Creole object is ##image_mapper##.
+
+
+
 ==== Link Prefixes
 This document contains ##{{{ [[cpan://Text::WikiCreole]] }}}## to indicate a link to a CPAN module.  Naturally, the Link Name Mapping needs to be set up to know what to do with links that begin with that prefix, transforming them to a real URL under ##search.cpan.org##.  But, there's another issue involved.
 
@@ -107,11 +215,86 @@ push @$defs, 'cpan';
 This needs to be adjusted //before// the Creole object does any parsing.  Once it starts using the parser, it cannot be changed.
 
 
+=== Placeholders
+
+Creole uses a syntax for //placeholders// which is three angle brackets.  For example ##<<<cookie>>>##.   The placeholder, which should not be confused with plug-ins, is something that will not be handled by editing the page in Creole, but you can edit around it.  Whatever it is will be stuck back in later.
+
+The class processes placeholders by simply marking up the cookie with ##<span class="placeholder">##.  You could locate that in the generated xhtml and complete the processing (perhaps using xslt).  Or, to drop the desired content back in while doing the Creole processing, you can override the process_placeholder method of the InlineFormat class.
+
+(This would make a good mix-in)
+
+=== Adding Other Syntax Extensions
+
+==== Block Formats
+
+Block formats are recognised by the LineBlocker class.  These are things like headers, paragraphs, and preformatted blocks.
+
+The first step is classifying the line of input.  For example, a line that begins with a string of equal signs is a header.  This is done with the classify_line method.  Override it to check for your new thing before calling the original version.
+
+The second step is to possibly refine or cancel that classification.  For example, everything is ignored inside a preformatted block except for the syntax to indicate the end of the preforatted block.  This cannot be easily planned for extension since I have no idea how your new things will relate to the other items.  Hopefully, you don't need to do anything here.
+
+The final step is to supply a handler for that block type.  The method is called ##process_line_//type//## for whatever type you classified.  So if you said your line was a Q, then it will call ##process_line_Q##.  This handler will eventally call _add_result to add the type/content tuple to the results list.
+
+There is a certain amount of flexibility already planned for.  Speficially, any block types that begin with pre and p are treated just like the normal pre and p types with respect to the various contextual and gathering logic.  If you classify your block as type "preQ", it should be gathered into a block ended with the standard ~}}} ending and treated as a single unit, and //then// call your ##process_line_preQ## handler.
+
+Later, the list of [blocktype, content] pairs is processed by the main Creole class.  It will format the content by calling the InlineFormat class, and this can be easily told whether that content should have inline formatting applied or not.  More significant special work, such as how tables are handled, would need to override ##InlineFormat->format##.
+
+The block tags are then added around the formatted content by the Creole::block_format function.  It contains logic to deal with context of opening and closing lists and tables as needed.  For everything else, it simply gets the tag information from the ##tag_data## hash, indexed by the block type.  So for a simple type with no wide-reaching concequences, you need only add a corresponding entry to ##tag_data##.
+
+==== Inline Formats
+
+So-called //simple// inline formats can be added by just adding them to the ##simple_format_tags## hash, as explained elsewhere.
+
+Anything else requires instructing the parser on how to parse out your proposed syntax.  This is done by adding a regex to the list of extensions before parsing starts.  Since order might be important, these have an ordering value given as well.
+
+The regex should contain named captures for the stuff it found along with the marking syntax, and end with a "mark" as described in perlre under //Special Backtracking Control Verbs//.  For example, to parse a ballanced brace-bracket combination, and furthermore have ##->## separate two portions within the construct, a regex to match it might be:
+{{{
+my $re= qr/
+	\{\[  \s* # opening delimiter (and whitespace)
+	(?<body>.*?) \s*   # the content
+	(?:    # optional second part
+		-> \s*  # separator indicating that there is a second part
+		(?<alt>.*>) \s*  # the stuff after the -> saved as <alt>
+	) ?  # I said the second part is optional
+	\]\}  # closing delimiter
+	(*:grape)  # must give this construct a unique name
+   /x;
+}}}
+
+When the parser recognises this as a match, it will call the method ##grammar_branch_grape## on the InlineFormat instance.  The method name comes from the label you gave at the end.  The parameter will be a hashref containing all the named captures; body and alt in this case.  That method should return a list of one or more strings that will be concatenated to form the final output.
+
+@#$ Not Implemented fully As Described yet @#$
+
+
 == Repurposing
 
 The class is really designed with xhtml output in mind.  However, most issues are encapsulated or at least isolated, so deriving a new class and changing a few things to generate not just different xml tags but fundamentally different output is not out of the question.
 
 The information used for each element marked up are in the ##tag_data## and ##simple_format_tags## hashes.  In each case, the value, an array ref, is only used by passing it to the format_tag or ##format_tag_wrapper## functions.  If you replaced these functions in the ##Text::Creole## class to generate different stuff before and after the content being marked up, you could populate the ##tag_data## and ##simple_format_tags## values with information suitable for your function.  You can use the array values for different purposes and use more than two indexes.
+
+== Header Control
+
+Whether or not inline markup is performed on the content of header text is a configurable option.  By default, it is on, so you can have (for example) bold and italic within headers.
+
+How many levels of header is allowed is configurable.  By default it will generate up to h6 since that is what xhtml naturally has.  If you enable more levels, you need to specify suitable tags via ##tag_data##.
+
+You can also specify a starting header level.  Since the Creole text might be incorporated into a page that already has a certain structure, you can control what level the headers start at, rather than making the user know to use the correct ones.
+
+Headers beyond the allowed range can be either ignored (turns to plain paragraphs so they can see that they are not headers) or clamped to the available range.
+
+@#$ Need all the configuration options for this
+
+== Indenting of Resulting XHTML
+
+Each block level of the generated xhtml can be indented further, and you can specify the whitespace added to the beginning of the line for each level.
+
+The whole thing can start off with a certain level, so you can match the generated content with the source of the page it is being embedded in.
+
+Naturally, it knows not to add leading whitespace to lines in a preformatted block.
+
+@#$ Indenting control is not yet implemented
+
+A related feature allows you to control whether original line breaks from the source text are retained, or if multi-line paragraphs are rendered as one line of output.
 
 
 

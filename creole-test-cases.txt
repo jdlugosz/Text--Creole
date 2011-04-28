@@ -68,6 +68,8 @@ or you can number them
 # // italic item 3 //
     ## item 3.1
   ## item 3.2
+# back to outer list (should be 4)
+# @#$ List blocking needs rework!
 
 up to five levels
 * 1

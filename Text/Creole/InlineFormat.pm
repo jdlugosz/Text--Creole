@@ -53,6 +53,7 @@ method _build_parser_spec
  my $ps= qr{(?<prematch>.*?)
      (?:
      $link
+     #   tilde string will go HERE
      | ~ (?<body> (?&link)|.|\Z  ) (*:escape)
      |  // \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic)  # special rules for //, skip any links in body.
 	 |  (?<simple>$simples)\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)

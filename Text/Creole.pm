@@ -83,7 +83,7 @@ method BUILD ($args)
     $defs->{'##'} = ['tt'];   # monospace
     $defs->{'^^'} = ['sup'];  # superscript
     $defs->{',,'} = ['sub'];  # subscript
-    $defs->{'__'} = ['u']; # underlined
+    $defs->{'__'} = ['span', 'underlined']; # underlined
     }
  }
    
