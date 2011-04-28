@@ -31,10 +31,12 @@ method _build_parser_spec
  # build the "simples" based on the declared tags
  my $simples_string= join "|", map { $_ eq '//' ? () : quotemeta($_) }  (keys %{$self->simple_format_tags});
  my $simples = qr{$simples_string};  # extensible by user.  Same opening and closing.
+ my $linkprefix_string= join "|", map { quotemeta($_) } @{$self->link_prefixes};
+ my $linkprefix= qr{$linkprefix_string};
  my $link= qr{
        (?<link>
           (?: \[\[\s*(?<body>.*?)\s*\]\]   )  # explicit use of brackets
-          | (?:  (?<body>(?:http|ftp)s?://\S+)   )   # bare (just a start)
+          | (?:  (?<body>$linkprefix://\S+)   )   # bare (just a start)
        )(*:link)
     }x;
  my $nowiki= qr{
@@ -196,7 +198,7 @@ method formatting_enabled (Str $type)
     when (/^h/) {
 	   return 0;   # will make configurable.
 	   }
-	when ('Pre') { return 0; }
+	when ('pre') { return 0; }
     default { return 1; }
     }
  }
@@ -213,7 +215,7 @@ has  tag_data => (
 
 has tag_formatter => (
     is => 'bare',
-    handles => [ qw( format_tag escape)],
+    handles => [ qw( format_tag escape link_prefixes)],
     required => 1,
     weak_ref => 1,  # normally points back to parent Creole object
     );

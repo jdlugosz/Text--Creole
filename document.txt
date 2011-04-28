@@ -16,21 +16,34 @@ So, I decided to write one from scratch, and concentrate on configurability and 
 
 === Escaping
 
-The text that winds up in the xhtml output needs to be checked for characters that would bother the xhtml format.  In particular, ##&## and ##<## are escaped.  Naturally it needs to understand that only stuff that is in the text proper needs to be escaped, and the various markup it //generated// should be left intact!  In particular, the ##escape## function is called for all spans of plain text and URL text.
+The text that winds up in the xhtml output needs to be checked for characters that would bother the xhtml format.  In particular, ##&## and ##<## are escaped.  Naturally it needs to understand that only stuff that is in the text proper needs to be escaped, and the various markup it //generated// should be left intact!  In particular, the ##escape## function is called for __all__ spans of plain text and URL text.
 
 The escape function will pass things that look like Entities as-is, so ##&Delta;## will pass through to the browser unchanged and show as a Greek Delta character, and not be escaped to show literally as ##~&Delta;##.  But to show the literal form as I did here, the ~ escape was used.
+
+==== Pseudo-Entities
+
+@#$ Not Implemented Yet @#$
+The escape function also handles pseudo-entities.  It would be confusing for the user if some entities worked everywhere and others did not work in PRE blocks and nowiki spans, so by design they work in the same layer as the regular Entity processing.
+
+A pseudo-entity is something that uses the Entity syntax but is not recognised by the browser.  Instead, it is substituted by this engine during Creole processing.  So, you can add your own named special characters that are not in the [[http://www.w3.org/TR/html4/sgml/entities.html | standard list]].
+
 
 === Filtering
 
 The 
 
+Also can be used for "magic words".
+
 == Extensions to Creole 1.0
 
-You may not necessarily want all the extensions enabled!  You might need to match the behavior of other code or be compatible with other consumers of the same input.  By default, the object handles baseline Creole 1.0 only.
+You may not necessarily want all the extensions enabled!  You might need to match the behavior of other code or be compatible with other consumers of the same input.
+
+=== Simple Inline Formats
+
 
 This document uses ## ~## monospace ~## ## markup, which is an extension.  In fact, it is a //simple inline format// extension, which is especially easy to handle.  These are characterised by having the identical opening and closing markers, and are mapped to some kind of inline formatting tag in the resulting xhtml.  You can add your own //simple// formats by adding to ##simple_format_tags##.
 
-Several common extensions are built in.  Construct the object with ##extended_simples## set to True like this:
+By default, the object handles baseline Creole 1.0 only, but several common extensions are built in.  Construct the object with ##extended_simples## set to True like this:
 {{{
 my $x= Text::Creole->new (extended_simples => 1);
 }}}
@@ -42,7 +55,63 @@ and it will enable
 | ~,, subscript ~,, | H,,2,,O | <sub>
 | ~__ underline ~__ | Some __underlined__ text | <u>
 
+You can modify the meaning of any of these, remove any, or add new ones.  After creating the ##Text::Creole## instance but //before// using it to do any formatting, you can access the ##simple_format_tags## member which is a hash reference.  For example, this document uses ##~@#$## to indicate a special note.  This is done like so:
 
+{{{
+my $x= Text::Creole->new (extended_simples => 1);
+my $defs= $x->simple_format_tags;
+$defs->{'@#$'} = ['span', 'flag'];
+}}}
+
+The name of the value in the ##simple_format_tags## hash is the formatting code to use.  You will find an entry for ##~**## to control the normal Bold, for example.  You can change it to issue xhtml ##<b>## tags instead of the default ##<strong>## by writing ##{{{ $defs->{'**'} = ['b']; }}}##.
+
+The value is a list, with the first (mandatory) element being the name of the tag to issue in the xhtml.  The second element, if present, will be used as the class attribute.  So, the custom ##~@#$## note ##~@#$## tags will be translated as ##{{{ <span class="flag">note</span> }}}##.
+
+=== Mixed List Types
+
+=== Non-Bulleted Paragraph / Indented Paragraph
+
+== Configuration
+
+=== Tags and Styles Generated
+
+You can change the xhtml tags and class attribute used for various elements.  The //simple inline format// styles are stored in the ##simple_format_tags## hash, as explained earlier.  Other markup is configured using the ##tag_data## hash.  This contains an entry for each markup element, with the value being the nominal tag used.  If you wanted to add a class attribute to the generated ##p## tags, for example, you could write:
+{{{
+my $defs= $creole->tag_data;
+$defs->{p} = ['p', 'someclass'];
+}}}
+
+You could specify a tag name other than p on the right-hand-side too, if that made sense.  
+
+=== Links
+
+There are two issues concerning links that need to be taylored to your application.  First, the text of a link needs to be transformed into a proper URL.  Second, you can specify prefixes that need to be recognised when parsing.
+
+==== Link Name Mapping
+
+==== Link Prefixes
+This document contains ##{{{ [[cpan://Text::WikiCreole]] }}}## to indicate a link to a CPAN module.  Naturally, the Link Name Mapping needs to be set up to know what to do with links that begin with that prefix, transforming them to a real URL under ##search.cpan.org##.  But, there's another issue involved.
+
+The regocnition of //bare links// and the fact that two slashes are used within link names as well as being the formatting code for italics causes complications in the parser.  We need to handle something like "This is // an italicised link to cpan://Text::WikiCreole // and this is back to normal text." whose source is:
+{{{
+This is // an italicised link to cpan://Text::WikiCreole // and this is back to normal text.
+}}}
+
+So that the occurance of {{{//}}} within the link doesn't close the italics but rather is taken as part of the link text, and yet not be over aggressive in spotting things that might look like bare links, you need to declare all the special prefixes you will allow.  By default it handles http, https, ftp, and ftps.  In this example, we need to add cpan to the list.
+
+The list (a ref to the array) can be accessed using ##link_prefixes##.  You can add and remove items from the list, or set a totally new value using the setter form of the method.
+{{{
+$defs= $creole->link_prefixes;
+push @$defs, 'cpan';
+}}}
+This needs to be adjusted //before// the Creole object does any parsing.  Once it starts using the parser, it cannot be changed.
+
+
+== Repurposing
+
+The class is really designed with xhtml output in mind.  However, most issues are encapsulated or at least isolated, so deriving a new class and changing a few things to generate not just different xml tags but fundamentally different output is not out of the question.
+
+The information used for each element marked up are in the ##tag_data## and ##simple_format_tags## hashes.  In each case, the value, an array ref, is only used by passing it to the format_tag or ##format_tag_wrapper## functions.  If you replaced these functions in the ##Text::Creole## class to generate different stuff before and after the content being marked up, you could populate the ##tag_data## and ##simple_format_tags## values with information suitable for your function.  You can use the array values for different purposes and use more than two indexes.
 
 
 

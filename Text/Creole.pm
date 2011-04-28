@@ -50,7 +50,16 @@ has tag_data => (
       get_tag_data => 'get'
 	  }, 
    );
+   
+has link_prefixes => (
+   is => 'rw',
+   isa => 'ArrayRef',
+   default => sub { [ qw/http https ftp ftps/ ] },
+   );
+   
 
+   
+   
 has _block_state => (
    # used to keep track of opening/closing tags around the blocks actually present (ul, ol, table)
    is => 'rw',
