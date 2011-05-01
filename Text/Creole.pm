@@ -3,6 +3,7 @@ use utf8;
 use autodie;
 package Text::Creole;
 use Moose;
+# with 'MooseX::Traits';
 use namespace::autoclean;
 use MooseX::Method::Signatures;
 
@@ -14,6 +15,10 @@ use Text::Creole::InlineFormat;
 Text::Creole - Parse Wiki Creole input and produce XHTML.
 
 =cut
+
+#has '+_trait_namespace' => ( 
+#   default => 'Text::Creole::PlugIn' 
+#   );
 
 
 has line_blocker => (
@@ -39,7 +44,7 @@ has inline_formatter => (
 
 our %default_tag_data=
    map { $_ => [ $_ ] } 
-   (qw/ a  br  h1  h2  h3  h4  h5  h6  h7  h8  h9  hr  img  li  p  pre  td  th  tr / );
+   (qw/ a  br  h1  h2  h3  h4  h5  h6  hr  img  li  p  pre  td  th  tr / );
 
 has tag_data => (
    is => 'rw',

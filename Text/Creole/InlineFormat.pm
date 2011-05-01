@@ -26,9 +26,10 @@ method format (Str $type, Str $line)
  return $self->do_format ($line);
  }
 
+sub REwrap($) { return '(?: ' . $_[0] . ' )' }
+
 method _build_parser_spec
  {
- # build the "simples" based on the declared tags
  my $simples_string= join "|", map { $_ eq '//' ? () : quotemeta($_) }  (keys %{$self->simple_format_tags});
  my $simples = qr{$simples_string};  # extensible by user.  Same opening and closing.
  my $linkprefix_string= join "|", map { quotemeta($_) } @{$self->link_prefixes};
@@ -39,9 +40,9 @@ method _build_parser_spec
           | (?:  (?<body>$linkprefix://\S+)   )   # bare (just a start)
        )(*:link)
     }x;
- my $nowiki= qr{
+ my $nowiki= REwrap q{
     \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)
-    }xs;
+    };
  my $image= qr{
     \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)
     }xs;
@@ -49,22 +50,26 @@ method _build_parser_spec
     \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)
     }xs;
  my $extensions= qr/(*FAIL)/;
- 
- my $ps= qr{(?<prematch>.*?)
+ my $italic= REwrap q{// \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic) };   # special rules for //, skip any links in body.
+ my $simple= REwrap q{(?<simple>} . $simples . q{)\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)};
+ my $escape= REwrap q{~ (?<body> (?&link)|.|\Z  ) (*:escape)};
+ my $ps_string= qq{(?<prematch>.*?)
      (?:
      $link
      #   tilde string will go HERE
-     | ~ (?<body> (?&link)|.|\Z  ) (*:escape)
-     |  // \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic)  # special rules for //, skip any links in body.
-	 |  (?<simple>$simples)\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)
+     |  $escape
+     |  $italic
+	 |  $simple
 	 | \\\\ (*:break)
      | $nowiki  # be sure to check for three braces before checking for two.
      | $image
      | $placeholder  # be sure to check for 3 angles before checking for 2 (extension)
      | $extensions
-	 | \Z (*:nada)  # must be the last branch
+	 | \\Z (*:nada)  # must be the last branch
 	)
-	}xs;
+	};
+ my $ps= qr/$ps_string/xs;
+ warn "$ps\n";
  return $ps;
  }
 

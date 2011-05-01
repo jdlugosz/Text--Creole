@@ -10,13 +10,22 @@ When I wanted to read Creole content for a web site design, I used [[cpan://Text
 
 So, I decided to write one from scratch, and concentrate on configurability and extendability.
 
-== Various Features ==
+== Set-up Checklist
 
-@#$ This is not organized yet.  I just note stuff when I think of it
+# Enable desired extensions and plug-ins.
+# Arrange for Link (and Image) Text Mapping.
+# Adjust the generated xhtml tags and class names.
+# Tune the output xhtml source formatting (indenting and line breaks).
+
+
+
+== Text Transformations ==
+
+A number of features perform transformations of text as opposed to generating formatting mark-up.  These are discussed in this section.
 
 === Escaping
 
-The text that winds up in the xhtml output needs to be checked for characters that would bother the xhtml format.  In particular, ##&## and ##<## are escaped.  Naturally it needs to understand that only stuff that is in the text proper needs to be escaped, and the various markup it //generated// should be left intact!  In particular, the ##escape## function is called for __all__ spans of plain text and URL text.
+The text that winds up in the xhtml output needs to be checked for characters that would bother the xhtml format.  In particular, ##&## and ##<## are escaped.  Naturally it understands that only stuff that is in the text proper needs to be escaped, and the various markup it //generated// should be left intact.  The ##escape## function is called for __all__ spans of plain text and URL text.
 
 The escape function will pass things that look like Entities as-is, so ##&Delta;## will pass through to the browser unchanged and show as a Greek Delta character, and not be escaped to show literally as ##~&Delta;##.  But to show the literal form as I did here, the ~ escape was used.
 
@@ -34,7 +43,14 @@ The //escaping// described above is processing that must be applied to __all__ c
 
 The filtering can be extended or replaced by overriding the ##filter## method of the Text::Creole class.  The built-in effects can be disabled using configuration parameters.
 
-The supplied filtering function performs:
+
+==== Direct Macros
+
+Anything that's not parsed as markup syntax can be specified as something to be replaced during processing.  For example XSIGX could be replaced with the signature/date/time of the edit.  (Note: some wikis use a string of tildes for this.  That is problematic here, since that is used as the escape character and handled at an earlier stage of processing.  Tilde string is handled by another feature, described below.)
+
+You can register regular expressions (so they can do some degree of context checking via look-ahead and look-behind assertions) and strings or callable subs for the substitutions.  Note that other markup characters will interrupt the text so look-around will be blocked.  This function is called for runs of plain text only and will see an isolated string if it's surrounded by markup syntax.
+
+Built-in processing is supplied for the following:
 
 * smart quotes (single and double)
 * smart apostrophe
@@ -42,23 +58,29 @@ The supplied filtering function performs:
 * {{{ (TM), (R), (C) }}}
 * em-dash and en-dash
 * numeric negative sign
-* configurable direct macros
-* configurable "magic words"
 
-==== Direct Macros
+You can enable them (@#$how?!@#$), and you can add your own replacement patterns.
 
-Anything can be specified as something to be replaced during processing.  For example XXXX could be replaced with the signature/date/time of the edit.  (Note: some wikis use a string of tildes for this.  That is problematic here, since that is used as the escape character and handled at an earlier stage of processing.  Tilde string is handled by another feature.)
-
-You can register regular expressions (so they can do some degree of context checking via look-ahead and look-behind assertions) and strings or callable subs for the substitutions.  Note that other markup characters will interrupt the text so look-around will be blocked.  This function is called for runs of plain text only and will see an isolated string if it's surrounded by markup syntax.
-
-=== Magic Words
+==== Magic Words
 
 Strings surrounded by ~@ characters, like {{{ @MAGICWORD@ }}}, are spotted and use a list of substitutions too.  You supply the string of the word (case-insensitive) not including the delimiters, along with a substutution string or sub.  You might generate a string of xhtml markup, not a simple text substution, so the result is //not// passed along to the escape function.  You must ensure that any substution supplied is proper xhtml.
 
 Anything that doesn't match a listed magic word is treated as-is and comes out unchanged, with the ~@ characters intact.
 
+The ##magic_words## accessor returns a hash ref.  You can set, change, and delete entries at any time.  The value is either a string or a sub for a callback function.  @#$ Not implemented yet @#$
 
-=== Tilde Strings
+{{{
+$creole->magic_words->{FOO}= q(<span class="bar">bar!</span>);
+$creole->magic_words->{SIG}= sub {
+	my $creole= shift;
+	my $s= generate_string_based_on_login;
+	return $creole->escape($s);
+	}
+}}}
+
+The callback function receives the Creole instance as a first parameter, so you can call ##escape## on approprate portions of your generated content.
+
+==== Tilde Strings
 
 Some wikis use a string of tildes to indicate things like signature or edit time.  Since the tilde is used to escape what follows, this needs to be handled specially, and processed before the normal use of tilde.
 
@@ -66,6 +88,11 @@ You can define a callback for a tilde string (@#$ TBD @#$) that is passed the co
 
 Like with the Magic Words, you might generate a string of xhtml markup, not a simple text substution, so the result is //not// passed along to the escape function.  You must ensure that any substution supplied is proper xhtml.
 
+The ##tilde_string## accessor returns an array ref.  The array index corresponds to how many tildes there are.  You can set the entry to a string or a sub ref, and it works the same as the Magic Words.
+
+{{{
+$creole->tilde_string->[3]= \&sigfunction;
+}}}
 
 == Extensions to Creole 1.0
 
@@ -106,34 +133,34 @@ The value is a list, with the first (mandatory) element being the name of the ta
 
 === Plug-in Syntax
 
-Plug-in's are not part of Creole 1.0, but is mentioned as an unofficial [[http://www.wikicreole.org/wiki/CreoleAdditions | Addition]] which may become part of a later version of the standard.
+Plug-ins are not part of Creole 1.0, but is mentioned as an unofficial [[http://www.wikicreole.org/wiki/CreoleAdditions | Addition]] which may become part of a later version of the standard.
 
 This document contains the source ##{{{<< AutoTOC >>}}}## which automatically generates a table of contents based on all the headers present.
 
 @#$ Not Implemented Yet @#$ 
 The syntax (two angle brackets, not to be confused with placeholders which use three) is enabled if any plug-ins are defined, and is separate for inline and block plug-ins.
 
-To define a plug-in, call ##{{{ $creole->add_plug_in ($name, \&callback, 'block'); }}}##.  The $name will be the first token in the brackets, and is case-insensitive.  The callback function is called with the name (actual case as found) and the rest of the contents of the brackets, and must return the xhtml to include at that point.  For example,
+To define a plug-in, call ##{{{ $creole->add_block_plug_in ($name, \&callback); }}}##.  The ##$name## will be the first token in the brackets, and is case-insensitive.  The callback function must return the xhtml to include at that point.  For example,
 
 {{{
 sub callback {
-   my ($name, $rest)= @_;
-   return qq(<span class="plugin">Plugin Name:$name and arguments $rest</span>);
+   my ($creole, $stash, $rest)= @_;
+   return qq(<span class="plugin">My Plugin called with arguments $rest</span>);
 }
 }}}
 
 Except that a real plug-in should take care to escape any content generated between the tags!
-The default, if a name is not matched with a registered plug-in handler, is similar to this, so you will see it indicated in the output (perhaps the Name was misspelled).
+The default, if a name is not matched with a registered plug-in handler, formats an error message so you will see it indicated in the output (perhaps the Name was misspelled or the plug-in was not loaded).
 
-An inline plugin will be recognised as inline formatting, in with a paragraph (or list item, table cell, etc.).  The return value should be xhtml suitable for being inside of a paragraph, e.g. a span.  The TOC wants to generate a div, not a span, and is a //block//.  Registering it as a block plug-in means that it will be parsed on the level with paragraphs, headers, etc.  The callback should generate xhtml that goes between paragraphs.  The parser only recognises block plug-ins when used in the manner of a block: It must be on a line by itself, and needs to be separated from a preceeding paragraph with a blank line.
+An inline plugin, registered via ##add_inline_plug_in##, will be recognised as inline formatting, within a paragraph (or list item, table cell, etc.).  The return value should be xhtml suitable for being inside of a paragraph, e.g. a span.  The TOC wants to generate a div, not a span, and is a //block//.  Registering it as a block plug-in means that it will be parsed on the level with paragraphs, headers, etc.  The callback should generate xhtml that goes between paragraphs.  The parser only recognises block plug-ins when used in the manner of a block: It must be on a line by itself, and needs to be separated from a preceeding paragraph with a blank line.
 
 Now the AutoTOC plug-in doesn't know what to generate until after all the input is processed!  The supplied AutoTOC is actually a plug-in for the Creole class, extending it to generate id attributes in the headers and keeping a list of all the headers and ids generated.  But it doesn't know the results when this tag is processed.
 
 So this callback looks something like this:
 {{{
 sub AutoTOC_callback {
-   my (undef, $args)= @_;
-   enable_and_configure_TOC_generation ($args);
+   my ($creole, $stash, $tail)= @_;
+   enable_and_configure_TOC_generation ($tail);
    return ("X", qq(<div class="TOC">\N{Object Replacement Character}(TOC goes here)</div>) );
 }
 }}}
@@ -142,6 +169,7 @@ A callback for a block plug-in returns //two// values, as it is called during th
 
 After passing the Creole text file through the object and gathering all the output, the caller can then ask the TOC class for the completed table of contents, and splice it into the original output.  It knows where to insert it by looking for its unique placeholder text.
 
+The Plug-In callback function also receives a //stash// argument.  This can be used to communicate between plug-ins, sense context, and pass information to the eventual xhtml tag generation.  This is used by the Anchor plug-in, for example.
 
 == Configuration
 
@@ -215,13 +243,24 @@ push @$defs, 'cpan';
 This needs to be adjusted //before// the Creole object does any parsing.  Once it starts using the parser, it cannot be changed.
 
 
+
+
 === Placeholders
 
-Creole uses a syntax for //placeholders// which is three angle brackets.  For example ##<<<cookie>>>##.   The placeholder, which should not be confused with plug-ins, is something that will not be handled by editing the page in Creole, but you can edit around it.  Whatever it is will be stuck back in later.
+Creole uses a syntax for //placeholders// which is three angle brackets.  For example ##<<<B:cookie>>>##.   The placeholder, which should not be confused with plug-ins, is something that will not be handled by editing the page in Creole, but you can edit around it.  Whatever it is will be stuck back in later.
 
-The class processes placeholders by simply marking up the cookie with ##<span class="placeholder">##.  You could locate that in the generated xhtml and complete the processing (perhaps using xslt).  Or, to drop the desired content back in while doing the Creole processing, you can override the process_placeholder method of the InlineFormat class.
+The intended use is to insert placeholders when creating a Creole version of some content; stuff that cannot be represented in Creole, or are elements that are to be left alone during this edit session, are filed away.  The process generates a short ID string and associated it with the hidden content.  The ID string is then used in the placeholder.  When the edits are complete and the page submitted, the original content is recalled based on the ID, and inserted.
 
-(This would make a good mix-in)
+Although opaque, the translation depends on whether the placeholder is for //block// or //inline// content.  As with a plug-in, it needs to know whether it goes __between__ paragraphs or __inside__ a paragraph.  To facilitate that, the cookie must begin with ##B:## or ##S::## respectively.
+
+By default, the Creole class processes placeholders by simply marking up the cookie with either ##<div class="placeholder">## or ##<span class="placeholder">##.  You could locate that in the generated xhtml and complete the processing (perhaps using xslt).  
+
+Alternatively, to drop the desired content back in while doing the Creole processing, you can register a callback that will produce the xhtml to insert at that spot.  This is formulated differently from Plug-Ins and other configurable features, because the content will be unique to a particular run.  Rather than having to register all the cookies with their content, and then revoke them and register different ones for the next file, a callback is passed the cookie and it can be written to work with the system that is tracking the placeholders in the larger program.
+
+@#$ need function @#$
+
+
+== Extending and Modifying the Creole Processor
 
 === Adding Other Syntax Extensions
 
