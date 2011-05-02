@@ -3,6 +3,7 @@ use utf8;
 use autodie;
 package Text::Creole::InlineFormat;
 use Moose;
+use MooseX::ClassAttribute;
 use namespace::autoclean;
 use MooseX::Method::Signatures;
 
@@ -26,52 +27,62 @@ method format (Str $type, Str $line)
  return $self->do_format ($line);
  }
 
-sub REwrap($) { return '(?: ' . $_[0] . ' )' }
-
-method _build_parser_spec
+sub build_parser_rules
  {
- my $simples_string= join "|", map { $_ eq '//' ? () : quotemeta($_) }  (keys %{$self->simple_format_tags});
- my $simples = qr{$simples_string};  # extensible by user.  Same opening and closing.
- my $linkprefix_string= join "|", map { quotemeta($_) } @{$self->link_prefixes};
- my $linkprefix= qr{$linkprefix_string};
+ my @parts;
+ push @parts, [ 70, q{ \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)  } ];
+ push @parts, [ 80, qr{ \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)   }xs ];
+ push @parts, [ 90, qr{ \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)  }xs ];
+ push @parts, [ 40, q{// \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic) } ];   # special rules for //, skip any links in body.
+ push @parts, [ 30, q{~ (?<body> (?&link)|.|\Z  ) (*:escape)} ];
+ push @parts, [ 60, qr{\\\\ (*:break)} ];
+ return \@parts;
+ }
+    
+method formulate_link_rule
+ {
+ # formulate the 'link' rule, which includes link_prefixes which are set after construction.
+ # So this is used at the last moment before the parser is created.
+ my $linkprefix= join "|", map { quotemeta($_) } @{$self->link_prefixes};
  my $link= qr{
        (?<link>
           (?: \[\[\s*(?<body>.*?)\s*\]\]   )  # explicit use of brackets
-          | (?:  (?<body>$linkprefix://\S+)   )   # bare (just a start)
+          | (?:  (?<body>(?: $linkprefix )://\S+)   )   # bare (just a start)
        )(*:link)
     }x;
- my $nowiki= REwrap q{
-    \{{3} \s* (?<body>.*?) \s* \}{3} (*:nowiki)
-    };
- my $image= qr{
-    \{{2} \s* (?<link>[^|]*?) \s* (?:  \|  (?<alt>.*?)  \s* )?   \}{2} (*:image)
-    }xs;
- my $placeholder= qr{
-    \<{3} \s* (?<body>.*?) \s* \>{3} (*:placeholder)
-    }xs;
- my $extensions= qr/(*FAIL)/;
- my $italic= REwrap q{// \s* (?<body>(?: (?&link)  | . )*?)  \s*  (?: (?: (?<!~)//) | \Z)(*:italic) };   # special rules for //, skip any links in body.
- my $simple= REwrap q{(?<simple>} . $simples . q{)\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)};
- my $escape= REwrap q{~ (?<body> (?&link)|.|\Z  ) (*:escape)};
- my $ps_string= qq{(?<prematch>.*?)
-     (?:
-     $link
-     #   tilde string will go HERE
-     |  $escape
-     |  $italic
-	 |  $simple
-	 | \\\\ (*:break)
-     | $nowiki  # be sure to check for three braces before checking for two.
-     | $image
-     | $placeholder  # be sure to check for 3 angles before checking for 2 (extension)
-     | $extensions
-	 | \\Z (*:nada)  # must be the last branch
-	)
-	};
- my $ps= qr/$ps_string/xs;
- warn "$ps\n";
+ return [ 10, $link ];
+ }
+ 
+method formulate_simples_rule
+ {
+ # formulate the 'simples' rule, which includes simple_format_tags which are set after construction.
+ # So this is used at the last moment before the parser is created.
+ my $simples= join "|", map { $_ eq '//' ? () : quotemeta($_) }  (keys %{$self->simple_format_tags});
+ return [ 50, q{(?<simple> (?:} . $simples . q{))\s*(?<body>.*?) \s* (?: (?: (?<!~)\k<simple>) | \Z)  (*:simple)} ];
+ }
+
+
+method get_final_parser_rules
+ {
+ my $parser_rules= $self->parser_rules;
+ push @$parser_rules, $self->formulate_link_rule, $self->formulate_simples_rule;
+ return $parser_rules
+ } 
+
+method _build_parser_spec
+ {
+ my $parser_rules= $self->get_final_parser_rules;
+ my $branches_string= join "\n | ", map {  
+    my $x= $$_[1];
+    ref $x ? $x : "(?: $x )"
+    } (sort { $a->[0] <=> $b->[0] } @$parser_rules);
+ my $ps= qr{(?<prematch>.*?)
+     (?: $branches_string
+	 | \Z (*:nada)  # must be the last branch
+	) }xs;
  return $ps;
  }
+
 
 method do_format (Str $line)
  {
@@ -226,6 +237,13 @@ has tag_formatter => (
     weak_ref => 1,  # normally points back to parent Creole object
     );
 
+    
+class_has parser_rules => (
+   is => 'rw',
+   isa => 'ArrayRef[ArrayRef]',
+   builder => 'build_parser_rules',
+   );
+    
 has _parser_spec => (
    is => 'rw',
    isa => 'RegexpRef',

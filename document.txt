@@ -259,58 +259,6 @@ Alternatively, to drop the desired content back in while doing the Creole proces
 
 @#$ need function @#$
 
-
-== Extending and Modifying the Creole Processor
-
-=== Adding Other Syntax Extensions
-
-==== Block Formats
-
-Block formats are recognised by the LineBlocker class.  These are things like headers, paragraphs, and preformatted blocks.
-
-The first step is classifying the line of input.  For example, a line that begins with a string of equal signs is a header.  This is done with the classify_line method.  Override it to check for your new thing before calling the original version.
-
-The second step is to possibly refine or cancel that classification.  For example, everything is ignored inside a preformatted block except for the syntax to indicate the end of the preforatted block.  This cannot be easily planned for extension since I have no idea how your new things will relate to the other items.  Hopefully, you don't need to do anything here.
-
-The final step is to supply a handler for that block type.  The method is called ##process_line_//type//## for whatever type you classified.  So if you said your line was a Q, then it will call ##process_line_Q##.  This handler will eventally call _add_result to add the type/content tuple to the results list.
-
-There is a certain amount of flexibility already planned for.  Speficially, any block types that begin with pre and p are treated just like the normal pre and p types with respect to the various contextual and gathering logic.  If you classify your block as type "preQ", it should be gathered into a block ended with the standard ~}}} ending and treated as a single unit, and //then// call your ##process_line_preQ## handler.
-
-Later, the list of [blocktype, content] pairs is processed by the main Creole class.  It will format the content by calling the InlineFormat class, and this can be easily told whether that content should have inline formatting applied or not.  More significant special work, such as how tables are handled, would need to override ##InlineFormat->format##.
-
-The block tags are then added around the formatted content by the Creole::block_format function.  It contains logic to deal with context of opening and closing lists and tables as needed.  For everything else, it simply gets the tag information from the ##tag_data## hash, indexed by the block type.  So for a simple type with no wide-reaching concequences, you need only add a corresponding entry to ##tag_data##.
-
-==== Inline Formats
-
-So-called //simple// inline formats can be added by just adding them to the ##simple_format_tags## hash, as explained elsewhere.
-
-Anything else requires instructing the parser on how to parse out your proposed syntax.  This is done by adding a regex to the list of extensions before parsing starts.  Since order might be important, these have an ordering value given as well.
-
-The regex should contain named captures for the stuff it found along with the marking syntax, and end with a "mark" as described in perlre under //Special Backtracking Control Verbs//.  For example, to parse a ballanced brace-bracket combination, and furthermore have ##->## separate two portions within the construct, a regex to match it might be:
-{{{
-my $re= qr/
-	\{\[  \s* # opening delimiter (and whitespace)
-	(?<body>.*?) \s*   # the content
-	(?:    # optional second part
-		-> \s*  # separator indicating that there is a second part
-		(?<alt>.*>) \s*  # the stuff after the -> saved as <alt>
-	) ?  # I said the second part is optional
-	\]\}  # closing delimiter
-	(*:grape)  # must give this construct a unique name
-   /x;
-}}}
-
-When the parser recognises this as a match, it will call the method ##grammar_branch_grape## on the InlineFormat instance.  The method name comes from the label you gave at the end.  The parameter will be a hashref containing all the named captures; body and alt in this case.  That method should return a list of one or more strings that will be concatenated to form the final output.
-
-@#$ Not Implemented fully As Described yet @#$
-
-
-== Repurposing
-
-The class is really designed with xhtml output in mind.  However, most issues are encapsulated or at least isolated, so deriving a new class and changing a few things to generate not just different xml tags but fundamentally different output is not out of the question.
-
-The information used for each element marked up are in the ##tag_data## and ##simple_format_tags## hashes.  In each case, the value, an array ref, is only used by passing it to the format_tag or ##format_tag_wrapper## functions.  If you replaced these functions in the ##Text::Creole## class to generate different stuff before and after the content being marked up, you could populate the ##tag_data## and ##simple_format_tags## values with information suitable for your function.  You can use the array values for different purposes and use more than two indexes.
-
 == Header Control
 
 Whether or not inline markup is performed on the content of header text is a configurable option.  By default, it is on, so you can have (for example) bold and italic within headers.
@@ -335,6 +283,74 @@ Naturally, it knows not to add leading whitespace to lines in a preformatted blo
 
 A related feature allows you to control whether original line breaks from the source text are retained, or if multi-line paragraphs are rendered as one line of output.
 
+= Extending and Modifying the Creole Processor
+
+== Block Formats
+
+Block formats are recognised by the LineBlocker class.  These are things like headers, paragraphs, and preformatted blocks.
+
+The first step is classifying the line of input.  For example, a line that begins with a string of equal signs is a header.  This is done with the ##classify_line## method.  Override it to check for your new thing before calling the original version.
+
+The second step is to possibly refine or cancel that classification.  For example, everything is ignored inside a preformatted block except for the syntax to indicate the end of the preforatted block.  This cannot be easily planned for extension since I have no idea how your new things will relate to the other items.  Hopefully, you don't need to do anything here.
+
+The final step is to supply a handler for that block type.  The method is called ##process_line_//type//## for whatever type you classified.  So if you said your line was a Q, then it will call ##process_line_Q##.  This handler will eventally call ##_add_result## to add the type/content tuple to the results list.
+
+There is a certain amount of flexibility already planned for.  Speficially, any block types that begin with pre and p are treated just like the normal pre and p types with respect to the various contextual and gathering logic.  If you classify your block as type "preQ", it should be gathered into a block ended with the standard ~}}} ending and treated as a single unit, and //then// call your ##process_line_preQ## handler.
+
+Later, the list of [blocktype, content] pairs is processed by the main Creole class.  It will format the content by calling the InlineFormat class, and this can be easily told whether that content should have inline formatting applied or not.  More significant special work, such as how tables are handled, would need to override ##InlineFormat->format##.
+
+The block tags are then added around the formatted content by the ##Creole::block_format## function.  It contains logic to deal with context of opening and closing lists and tables as needed.  For everything else, it simply gets the tag information from the ##tag_data## hash, indexed by the block type.  So for a simple type with no wide-reaching concequences, you need only add a corresponding entry to ##tag_data##.
+
+== Inline Formats
+
+So-called //simple// inline formats can be added by just adding them to the ##simple_format_tags## hash, as explained elsewhere.
+
+Anything else requires instructing the parser on how to parse out your proposed syntax, and then providing code to emit the desired xhtml for that construct.
+
+=== Adding a grammar rule
+
+The grammar is a series of regex "rules" that are combined with ##|## so that it will find the first "thing", whatever it might be.  That is, it must look for bold|italic|link... all in parallel.  You can easily add to the list of choices.
+
+The regex should contain named captures for the stuff it found along with the marking syntax, and end with a "mark" as described in perlre under //Special Backtracking Control Verbs//.  For example, to parse a ballanced brace-bracket combination, and furthermore have ##->## separate two portions within the construct, a regex to match it might be:
+{{{
+my $re= qr/
+	\{\[  \s* # opening delimiter (and whitespace)
+	(?<body>.*?) \s*   # the content
+	(?:    # optional second part
+		-> \s*  # separator indicating that there is a second part
+		(?<alt>.*>) \s*  # the stuff after the -> saved as <alt>
+	) ?  # I said the second part is optional
+	\]\}  # closing delimiter
+	(*:grape)  # must give this construct a unique name
+   /x;
+}}}
+
+Now you just have to tell ##Creole::InlineFormat## about your new matching rule.
+
+The InlineFormat class contains a Class Attribute called ##parser_rules##, which is a list of rules like the one shown above.  Since parsing might need to take place in a particular order (e.g. need to check for three opeing braces before checking for two), the rules have a sort order attached.  Each list item is a number/rule pair, as can be seen in ##build_parser_rules##.  The rules are sorted just before being combined, so you can add to the list and specify your new rule as being before or after anything else as needed.
+
+You can also edit the rule list, locating a rule by its MARK name (like our ##(*:grape)##, and replacing it with a different version that has the same named captures.
+
+The rule can either be a string or a qr (compile regex) object.  If it's a string, it will have non-capuring parens added around it so there is no need to include that in your string.
+
+The original list of rules is in the Class Attribute ##parser_rules##, and your extension can manipulate that before the instance is created.  A Role can also extend its builder, ##build_parser_rules##.  More experimentation needs to be done to recomend a canonocal way of doing it.
+
+A few rules require information that is provided to the instance after it is created, at any time before it is called upon to do any parsing.  The method ##get_final_parser_rules## will combine these run-time formulated rules with the original list and return that.  You can extend this function to add more rules, if your extension has similar needs.
+
+Actually, applying an ##after## modifier to ##get_final_parser_rules## is probably the simplest thing to do as a matter of course.  In retrospect, making the rules available as "static" data is probably not needed.
+
+
+=== Adding the Action for the rule
+
+When the parser recognises this as a match, it will call the method ##grammar_branch_grape## on the InlineFormat instance.  The method name comes from the label you gave at the end.  The parameter will be a hashref containing all the named captures; body and alt in this case.  That method should return a list of one or more strings that will be concatenated to form the final output.
+
+@#$ Not Implemented fully As Described yet @#$
+
+== Repurposing
+
+The class is really designed with xhtml output in mind.  However, most issues are encapsulated or at least isolated, so deriving a new class and changing a few things to generate not just different xml tags but fundamentally different output is not out of the question.
+
+The information used for each element marked up are in the ##tag_data## and ##simple_format_tags## hashes.  In each case, the value, an array ref, is only used by passing it to the format_tag or ##format_tag_wrapper## functions.  If you replaced these functions in the ##Text::Creole## class to generate different stuff before and after the content being marked up, you could populate the ##tag_data## and ##simple_format_tags## values with information suitable for your function.  You can use the array values for different purposes and use more than two indexes.
 
 
 Still eating last line?
