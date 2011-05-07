@@ -96,17 +96,19 @@ Recommended XHTML:
 <em>This is <strong>also</strong> good.</em>
 }}}
 
-Sample Output:
+Sample Output (corrected):
 
-__''Bold italics''__\\
-''__Bold italics__''\\
-''This is __also__ good''
+**//Bold italics//**\\
+//**Bold italics**//\\
+//This is **also** good//
 
 Unacceptable:
 {{{
 **//bold italics**//
 //**bold italics//**
 }}}
+
+Test cases for smart quotes near bold and italic codes:  Quotes around markup ( "//italic//" ) and quotes immediately within the markup ( **"bold"** ) work correctly.  ("this" works right too.)
 
 == Headings
 
@@ -172,17 +174,30 @@ Recommended XHTML:
 <a href="http://wikiohana.net/cgi-bin/wiki.pl/WikiFamily">Ohana:WikiFamily</a>
 }}}
 
-Sample Output:
+Sample Output: (corrected!)
 
-[link]\\
-[Go to my page|MyBigPage]\\
-[http://www.wikicreole.org/]\\
-[http://www.rawlink.org/], [http://www.another.rawlink.org]\\
-[Visit the WikiCreole website|http://www.wikicreole.org/]\\
-[**Weird** //Stuff//|Weird_Stuff]\\
+[[link]] \\
+[[MyBigPage|Go to my page]] \\
+[[http://www.wikicreole.org/]] \\
+http://www.rawlink.org/, http://www.another.rawlink.org \\
+[[http://www.wikicreole.org/|Visit the WikiCreole website]] \\
+[[Weird Stuff|**Weird** //Stuff//]] \\
 [[Ohana:WikiFamily]]
 
+
 **Rationale:** Almost all wikis use square brackets ({{{[[]]}}}) to make links.  Using double square brackets allows single square brackets to be used freely without worry of turning them into links. [[Links Reasoning|More details]]
+
+More test cases:
+
+* [[http://example.com?a=5&b=6 | this link needs escaping]].
+* [[http://example.com/mooµxyz]] this link contains a non-ASCII character.
+* The example is http://www.example.com/foo/bar.html.  It contains hanging punctuation.
+* The next example is [[Block]]s, which contains a hanging suffix.
+* But in [[Block | Block]]s that doesn't occur because a name is explicitly given.
+* Non-word characters, like [[Block]], [[Block]]'s, and "[[Block]]" don't merge.
+* Non-ASCII words work too: [[Block]]xł佝 should merge.
+* Combining marks should be handled: [[Block]]p̊x̹ should merge.
+
 
 == Paragraphs
 
@@ -303,6 +318,7 @@ Whitespace is optional before and after the hyphens, but no whitespace is allowe
 
 Creole:
 {{{ ---- }}}
+
 Recommended XHTML:
 {{{ <hr /> }}}
 

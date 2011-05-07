@@ -6,6 +6,8 @@
 
 You can have <<<placeholder>>> objects that I don't know what to do with.
 
+<<<B:block placeholder>>>
+
 The ending equal signs should not be displayed:
 
 = Top-level heading (1) =

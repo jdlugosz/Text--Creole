@@ -3,9 +3,9 @@ use utf8;
 use autodie;
 package Text::Creole;
 use Moose;
-# with 'MooseX::Traits';
 use namespace::autoclean;
 use MooseX::Method::Signatures;
+use MooseX::Types::Moose qw/HashRef ArrayRef RegexpRef CodeRef/;
 
 use Text::Creole::LineBlocker;
 use Text::Creole::InlineFormat;
@@ -16,30 +16,35 @@ Text::Creole - Parse Wiki Creole input and produce XHTML.
 
 =cut
 
-#has '+_trait_namespace' => ( 
-#   default => 'Text::Creole::PlugIn' 
-#   );
-
+method build_line_blocker
+ {
+ return Text::Creole::LineBlocker->new (
+    parse_option => $self->parse_option
+    );
+ }
 
 has line_blocker => (
    is => 'ro',
-   default => sub { Text::Creole::LineBlocker->new; },
+   lazy => 1,
+   builder => 'build_line_blocker',
    handles => [qw( input_some input_all)],
    );
 
 method build_inline_formatter
  { 
  return Text::Creole::InlineFormat->new(
-      tag_formatter => $_[0],
-      tag_data => $_[0]->tag_data,
-      );  
+      tag_formatter => $self,
+      config_keeper => $self,
+      tag_data => $self->tag_data,
+      parse_option => $self->parse_option
+      );
  }
 
 has inline_formatter => (
    is => 'ro',
    lazy => 1,
    builder => 'build_inline_formatter',
-   handles => [qw/simple_format_tags/],
+   handles => [qw/simple_format_tags /],
    );
 
 our %default_tag_data=
@@ -49,7 +54,7 @@ our %default_tag_data=
 has tag_data => (
    is => 'rw',
    traits => ['Hash'],
-   isa => 'HashRef',
+   isa => HashRef,
    default => sub { \%default_tag_data },
    handles => {
       get_tag_data => 'get'
@@ -58,13 +63,41 @@ has tag_data => (
    
 has link_prefixes => (
    is => 'rw',
-   isa => 'ArrayRef',
+   isa => ArrayRef,
    default => sub { [ qw/http https ftp ftps/ ] },
    );
    
+has placeholder_callback => (
+   is => 'rw',
+   isa => CodeRef,
+   );
 
+has link_mapper => (
+   is => 'rw',
+   isa => CodeRef,
+   default => sub { \&default_link_mapper },
+   );
    
-   
+has image_mapper => (
+   is => 'rw',
+   isa => CodeRef,
+   );
+
+my %default_parse_options= (
+   'entity-passthrough-PRE' => 1,
+   blended_links => 1,
+   );
+
+has parse_option => (
+   is => 'rw',
+   isa => 'HashRef',
+   traits => ['Hash'],
+   default => sub { \%default_parse_options },
+   handles => {
+      get_parse_option => 'get'
+	  },
+   );
+
 has _block_state => (
    # used to keep track of opening/closing tags around the blocks actually present (ul, ol, table)
    is => 'rw',
@@ -211,7 +244,7 @@ method block_format (Str $type, Str $text)
     $self->_block_state($incoming);
     }
  # TODO: handle indenting (but not PRE)
- push @results, $self->format_tag ($self->get_tag_data($type), $text);
+ push @results, $self->format_tag ($self->get_tag_data($type), $text)   unless $type eq 'B';
  return @results;
  }
  
@@ -255,22 +288,51 @@ This is called to sanitize text of any special xml characters.  It is called for
 
 =cut
 
-method escape (Str $line)
+method escape (Str $line, Str $type?)
  {
- $line =~ s/
-    &   #any ampersand...
-    (?!  # that's NOT followed by stuff that would make it an Entity reference
-       (?:  # various ways to form the guts of the Entity
-          [a-zA-Z]+\d*  # some entity names end with digits, but never have them elsewhere.
-          | \# (?:  # A numeric entity code
-             \d+ |  (?:x|X) [[:xdigit:]]+
-             )
-       )
-     ;  # and a trailing semicolon.
-    )/&amp;/gx;
+ my $entity_passthrough= 1;  #normally on.
+ if (defined $type) {
+    $entity_passthrough= $self->get_parse_option('entity-passthrough-PRE')   if ($type eq 'pre');
+    }
+ if ($entity_passthrough) {
+    $line =~ s/
+       &   #any ampersand...
+       (?!  # that's NOT followed by stuff that would make it an Entity reference
+          (?:  # various ways to form the guts of the Entity
+             [a-zA-Z]+\d*  # some entity names end with digits, but never have them elsewhere.
+             | \# (?:  # A numeric entity code
+                \d+ |  (?:x|X) [[:xdigit:]]+
+                )
+          )
+        ;  # and a trailing semicolon.
+       )/&amp;/gx;
+    }
+ else {
+    $line =~ s/&/&amp;/g;  # escape out ALL uses of '&'.
+    }
  $line =~ s/</&lt;/g;
  return $line;
  }
 
+method filter (Str $text)
+ {
+ # smart quotes
+ $text =~ s/^"(?=\s)/”/;  # quote at beginning of sequence is closing (only) if it is followed by whitespace.
+ $text =~ s/(?:[\s(]|\A)\K"/“/g;  # quote following space or '(' is opening
+ $text =~ s/"/”/g;  # all others are closing
+ # ...
+ return $text;
+ }
+ 
+sub default_link_mapper
+ {
+ my ($linkref, $text)= @_;
+ # this sanitizes any characters that cannot occur in a URI.  Reserved chars are expected to be used correctly, and not touched.
+ my $re= qr/[^-_.~A-Za-z0-9!*'();:@&=+\$,\/?#\[\]]/;
+ use bytes;
+ $linkref =~ s/($re)/sprintf("%%%02X",ord($1))/ge;
+ return ($linkref, $text);
+ }
+ 
 
  __PACKAGE__->meta->make_immutable;

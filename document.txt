@@ -29,6 +29,19 @@ The text that winds up in the xhtml output needs to be checked for characters th
 
 The escape function will pass things that look like Entities as-is, so ##&Delta;## will pass through to the browser unchanged and show as a Greek Delta character, and not be escaped to show literally as ##~&Delta;##.  But to show the literal form as I did here, the ~ escape was used.
 
+The entity passthrough feature can get in the way if you really mean to say something like ##my $coderef= \~&function;## which happens to use an ampersand and semicolon in a combination that //looks// like an entity.  This is more common in programming languages (Perl in particular) than in prose, so is likely to appear in PRE blocks rather than in a paragraph.  Furthermore, the tilde escape mechanism doesn't work inside PRE blocks.
+
+If you get a false hit like that, you would need to escape out the ampersand explicitly: write ##\~&amp;function;##.  To facilitate this module's use in contexts where this would be commonplace, you can disable entity passthrough for PRE blocks.  Do so using the miscelaneous ##parse_options## hash:
+
+{{{
+my $defs= $creole->parse_option;
+$defs->{'entity-passthrough-PRE'} = 0;
+}}}
+
+This document in particular wants to be processed with entity passthrough disabled in PRE blocks.
+
+If a false hit occurs and a & is left unescaped, you will either get a funny character in the browser if that is indeed a legal entity name.  If it's a random word that is not recognised by the browser as an entity name, you will get a non-conforming file.   @#$ perhaps this class should check against all the legal names? @#$
+
 ==== Pseudo-Entities
 
 @#$ Not Implemented Yet @#$
@@ -59,7 +72,7 @@ Built-in processing is supplied for the following:
 * em-dash and en-dash
 * numeric negative sign
 
-You can enable them (@#$how?!@#$), and you can add your own replacement patterns.
+You can enable them (@#$how?!@#$), and you can add your own replacement patterns.  Replacements are suppressed by using the tilde, as well as within nowiki blocks.
 
 ==== Magic Words
 
@@ -98,6 +111,18 @@ $creole->tilde_string->[3]= \&sigfunction;
 
 You may not necessarily want all the extensions enabled!  You might need to match the behavior of other code or be compatible with other consumers of the same input.
 
+=== Blended Links
+
+As [[http://en.wikipedia.org/wiki/Help:Wiki_markup#Blend_link | seen on Wikipedia]], endings can be blended into the link.  For example, [[bus]]es.  As with Wikipedia, an empty nowiki block can interrupt it so blending does not occur, using Creole syntax for the nowiki of course:  ##~[[micro-]]~{~{{}}}second## produces [[micro-]]{{{}}}second.  You can also use the tilde escape, which is easier: ##{{{[[micro-]]~second}}}## produces [[micro-]]~second.
+
+This can be disabled using the miscelaneous ##parse_options## hash:
+{{{
+my $defs= $creole->parse_option;
+$defs->{'blended_links'} = 0;
+}}}
+
+This must be specified before the object fed any input.
+
 === Simple Inline Formats
 
 
@@ -113,7 +138,7 @@ and it will enable
 | ~## monospace ~## | This is some ##code## sample| <tt>
 | ~^^ superscript ~^^ | 6.022 × 10^^23^^ | <sup>
 | ~,, subscript ~,, | H,,2,,O | <sub>
-| ~__ underline ~__ | Some __underlined__ text | <span class="underlined">\\(the <u> tag is deprecated and not allowed in strict xhtml)
+| ~__ underline ~__ | Some __underlined__ text | <span class=~"underlined~">\\(the <u> tag is deprecated and not allowed in strict xhtml)
 
 You can modify the meaning of any of these, remove any, or add new ones.  After creating the ##Text::Creole## instance but //before// using it to do any formatting, you can access the ##simple_format_tags## member which is a hash reference.  For example, this document uses ##~@#$## to indicate a special note.  This is done like so:
 
@@ -189,7 +214,7 @@ There are two issues concerning links that need to be taylored to your applicati
 
 ==== Link Name Mapping
 
-When the user writes a like like ##{{{ [[Somepage]] }}}##, that has meaning defined by the system it is being used in.  In order to render this as an actual link, it needs to be translated into a full URL.  In general, this is different for every system, so you need to configure it.
+When the user writes a link like ##{{{ [[Somepage]] }}}##, that has meaning defined by the system it is being used in.  In order to render this as an actual link, it needs to be translated into a full URL.  In general, this is different for every system, so you need to configure it.
 
 You can pass a sub ref to the object when creating it or by using the attribute accessor afterwards (the latter lets you chain to the previous value).  The attribute is called ##link_mapper##.  For example, you can write:
 {{{
@@ -212,12 +237,13 @@ sub link_mapper_callback {
 }
 }}}
 
-This example mapps the cpan shortcut to a proper URL, and furthermore returns a type of "a-external".  This third value, the type, will be looked up in ##tag_data## (see above on configuring tag data), which could be set to ##['a', 'external']##.  Now a bare link in the text such as ##~cpan://FormFu## will generate ##{{{<a href="http://search.cpan.org/search?query=FormFu" class="external">FormFu</a>}}}##.
+This example maps the cpan shortcut to a proper URL, and furthermore returns a type of "a-external".  This third value, the type, will be looked up in ##tag_data## (see above on configuring tag data), which could be set to ##['a', 'external']##.  Now a bare link in the text such as ##~cpan://FormFu## will generate ##{{{<a href="http://search.cpan.org/search?query=FormFu" class="external">FormFu</a>}}}##.
 
-@#$Am going to implement this soon@#$
+The resulting //$text//, either returned from your callback, unchanged from the source with the ##|## syntax, or copied from the link specification (if no ##|## was present), will either be escaped or recursively processed for inline formatting codes, depending on whether formatting in link text is enabled.
+
+The returned //$link// value is expected to be a properly formed URL suitable for use as the value of an href attribute.  It should be URI Escaped as needed, but the main code will then do the HTML escaping so don't HTML-escape the string before returning it.
 
 If no mapper function is supplied, the default is to leave them unchanged.
-
 
 ==== Image Name Mapping
 
@@ -251,13 +277,30 @@ Creole uses a syntax for //placeholders// which is three angle brackets.  For ex
 
 The intended use is to insert placeholders when creating a Creole version of some content; stuff that cannot be represented in Creole, or are elements that are to be left alone during this edit session, are filed away.  The process generates a short ID string and associated it with the hidden content.  The ID string is then used in the placeholder.  When the edits are complete and the page submitted, the original content is recalled based on the ID, and inserted.
 
-Although opaque, the translation depends on whether the placeholder is for //block// or //inline// content.  As with a plug-in, it needs to know whether it goes __between__ paragraphs or __inside__ a paragraph.  To facilitate that, the cookie must begin with ##B:## or ##S::## respectively.
+Although opaque, the translation depends on whether the placeholder is for //block// or //inline// content.  As with a plug-in, it needs to know whether it goes __between__ paragraphs or __inside__ a paragraph.  To facilitate that, the cookie must begin with ##B:## or ##S:## respectively.  @#$ Block parse not implemented yet @#$
 
-By default, the Creole class processes placeholders by simply marking up the cookie with either ##<div class="placeholder">## or ##<span class="placeholder">##.  You could locate that in the generated xhtml and complete the processing (perhaps using xslt).  
+By default, the Creole class processes placeholders by simply marking up the cookie with either ##{{{<div class="placeholder">}}}## or ##{{{<span class="placeholder">}}}##.  You could locate that in the generated xhtml and complete the processing (perhaps using xslt).
 
 Alternatively, to drop the desired content back in while doing the Creole processing, you can register a callback that will produce the xhtml to insert at that spot.  This is formulated differently from Plug-Ins and other configurable features, because the content will be unique to a particular run.  Rather than having to register all the cookies with their content, and then revoke them and register different ones for the next file, a callback is passed the cookie and it can be written to work with the system that is tracking the placeholders in the larger program.
 
-@#$ need function @#$
+The block-handling pass will recognise things that have a cookie starting with ##B:## and are the only thing on a source line.  If things are misused, they will not call the callback but will drop in the span as indicated above, with the class of ##bad-block-placeholder##.  This way the user can see that he mis-edited the text and put what should be a block in the middle of a line.  The callback won't be called so it won't stick a div in the middle of a paragraph or whatever.
+
+Currently, anything that doesn't have a cookie that starts with a ##B:## is treated as inline.
+
+The accessor (or constructor argument) ##placeholder_callback## can be used to get or set the callback function.  It should return a list of strings that will be concatenated into the final output.  If it returns an empty list, the callback is saying it is passing on the opportunity (perhaps it does not recognise the cookie) and the span will be used.
+
+The following sample: <<<XXexampleXX>>> will be handled by the callback example code.  The placeholder callback has this form:
+{{{
+sub placeholder_sample
+ {
+ my ($tag_formatter, $cookie)= @_;
+ my $contents= $tag_formatter->escape($cookie);
+ return $tag_formatter->format_tag ([ 'span', 'placeholder' ], $contents);
+ }
+}}}
+The first parameter is an object which will have some useful methods for preparing the xhtml.  Or particular note is ##escape## which will perform the function of escaping < and & characters.  It can also draw upon the same configuration for tags that is used by the Creole class.
+
+
 
 == Header Control
 
@@ -329,7 +372,7 @@ Now you just have to tell ##Creole::InlineFormat## about your new matching rule.
 
 The InlineFormat class contains a Class Attribute called ##parser_rules##, which is a list of rules like the one shown above.  Since parsing might need to take place in a particular order (e.g. need to check for three opeing braces before checking for two), the rules have a sort order attached.  Each list item is a number/rule pair, as can be seen in ##build_parser_rules##.  The rules are sorted just before being combined, so you can add to the list and specify your new rule as being before or after anything else as needed.
 
-You can also edit the rule list, locating a rule by its MARK name (like our ##(*:grape)##, and replacing it with a different version that has the same named captures.
+You can also edit the rule list, locating a rule by its MARK name (like our ##(*:grape)##), and replacing it with a different version that has the same named captures.
 
 The rule can either be a string or a qr (compile regex) object.  If it's a string, it will have non-capuring parens added around it so there is no need to include that in your string.
 
@@ -337,14 +380,12 @@ The original list of rules is in the Class Attribute ##parser_rules##, and your 
 
 A few rules require information that is provided to the instance after it is created, at any time before it is called upon to do any parsing.  The method ##get_final_parser_rules## will combine these run-time formulated rules with the original list and return that.  You can extend this function to add more rules, if your extension has similar needs.
 
-Actually, applying an ##after## modifier to ##get_final_parser_rules## is probably the simplest thing to do as a matter of course.  In retrospect, making the rules available as "static" data is probably not needed.
+Actually, applying an ##after## modifier to ##get_final_parser_rules## is probably the simplest thing to do as a matter of course.  In retrospect, making the rules available as "static" data is probably not needed.  @#$ TODO:@#$ This will be fleshed out with examples once I write some working extensions as part of the project.
 
 
 === Adding the Action for the rule
 
 When the parser recognises this as a match, it will call the method ##grammar_branch_grape## on the InlineFormat instance.  The method name comes from the label you gave at the end.  The parameter will be a hashref containing all the named captures; body and alt in this case.  That method should return a list of one or more strings that will be concatenated to form the final output.
-
-@#$ Not Implemented fully As Described yet @#$
 
 == Repurposing
 

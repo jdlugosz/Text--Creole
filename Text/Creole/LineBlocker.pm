@@ -182,7 +182,7 @@ method relate_to_current (Str $ptype, Str $line)
     $self->add_to_current_para ('');  #end a PRE block with a line break.
     }
  $self->complete_current_para;
- if ($ptype ~~ [qw/B endPre/]) {
+ if ($ptype ~~ [qw/endPre/]) {
 	return undef;
     }
  return 1;
@@ -228,7 +228,10 @@ method process_line_T ($line)
  
 method process_line_B ($line)
  {
- # throws away blank lines
+ $self->_add_result('B', '');
+ $self->clear_current_state();
+ # Acts as a separator so current "thing" is ended.
+ # in particular, a blank line terminates a list block.  So next phase might need to know it was here.
  }
  
 method process_line_h ($line)
@@ -276,7 +279,7 @@ has _current_para => (
 		},
 	);
 
-# This keeps track of what the _current_para is building, or whether I'm in a list of some level. (List items are not themselves multi-line)
+# This keeps track of what the _current_para is building, or whether I'm in a list of some level.
 has _current_state => (
    is => 'rw',
    init_arg => undef,
